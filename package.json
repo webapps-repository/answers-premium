@@ -5,7 +5,6 @@
   "main": "index.js",
   "scripts": {
     "dev": "vercel dev",
-    "build": "vercel build"
   },
   "dependencies": {
     "formidable": "^3.5.1",
