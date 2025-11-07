@@ -1,4 +1,6 @@
 // api/test-email.js
+// api/test-email.js
+// api/test-email.js
 
 import { Resend } from 'resend';
 
