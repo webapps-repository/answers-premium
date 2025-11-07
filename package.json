@@ -4,7 +4,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
-    "dev": "vercel dev",
+    "dev": "vercel dev"
   },
   "dependencies": {
     "formidable": "^3.5.1",
