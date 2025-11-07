@@ -1,14 +1,14 @@
 {
-  "name": "answers",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "index.js",
-  "dependencies": {
-    "formidable": "^3.5.1",
-    "pdfkit": "^0.13.0",
-    "get-stream": "^6.0.1",
-    "resend": "^6.4.1",
-    "node-fetch": "^3.3.2"
-  }
+  "version": 2,
+  "builds": [
+    {
+      "src": "api/**/*.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "rewrites": [
+    { "source": "/api/(.*)", "destination": "/api/$1.js" }
+  ]
 }
+
 
