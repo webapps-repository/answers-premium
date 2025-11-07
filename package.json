@@ -2,8 +2,7 @@
   "name": "answers",
   "version": "1.0.0",
   "type": "module",
-  "main": "index.js"
-  },
+  "main": "index.js",
   "dependencies": {
     "formidable": "^3.5.1",
     "pdfkit": "^0.13.0",
