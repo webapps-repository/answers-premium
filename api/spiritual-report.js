@@ -1,6 +1,3 @@
-// test updates
-// test updates
-// new file uploads
 // new file uploads
 // new file uploads
 // new file uploads
