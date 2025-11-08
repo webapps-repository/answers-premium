@@ -63,7 +63,12 @@ export default async function handler(req, res) {
         });
 
         const verification = await verify.json();
-        
+
+        // --- Debug: Log token + secret status
+        let token = fields["g-recaptcha-response"];
+        if (Array.isArray(token)) token = token[0];
+        console.log("Token received:", token);
+        console.log("Using secret:", process.env.RECAPTCHA_SECRET_KEY ? "✅ Present" : "❌ Missing");
         console.log("reCAPTCHA verification response:", verification);
         console.log("Verifying domain:", verification.hostname);
         console.log("Verification details:", verification);
