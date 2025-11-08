@@ -43,7 +43,10 @@ export default async function handler(req, res) {
       console.log("Token received:", fields["g-recaptcha-response"]);
       console.log("Using secret:", process.env.RECAPTCHA_SECRET_KEY ? "✅ Present" : "❌ Missing");
 
-      const token = fields["g-recaptcha-response"];
+      const token = Array.isArray(fields["g-recaptcha-response"])
+        ? fields["g-recaptcha-response"][0]
+        : fields["g-recaptcha-response"];
+      
       if (!token) {
         return res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' });
       }
