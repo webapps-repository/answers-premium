@@ -13,12 +13,12 @@ export const config = {
 
 export default async function handler(req, res) {
   // ✅ Add CORS headers
-  res.setHeader('Access-Control-Allow-Origin', '*'); // Or restrict to Shopify domain for security
+  res.setHeader('Access-Control-Allow-Origin', '*'); // Restrict to Shopify domain later for security
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Max-Age', '86400');
 
-  // ✅ Handle CORS preflight requests (important!)
+  // ✅ Handle preflight CORS requests
   if (req.method === 'OPTIONS') {
     return res.status(200).end();
   }
@@ -39,18 +39,19 @@ export default async function handler(req, res) {
         return res.status(500).json({ success: false, error: 'Form parsing error' });
       }
 
-      console.log("Token received:", fields["g-recaptcha-response"]);
+      // ✅ Cleanly extract token (handles array vs string)
+      let token = fields["g-recaptcha-response"];
+      if (Array.isArray(token)) token = token[0];
+
+      console.log("Token received:", token);
       console.log("Using secret:", process.env.RECAPTCHA_SECRET_KEY ? "✅ Present" : "❌ Missing");
 
-      const token = Array.isArray(fields["g-recaptcha-response"])
-        ? fields["g-recaptcha-response"][0]
-        : fields["g-recaptcha-response"];
-      
       if (!token) {
         return res.status(400).json({ success: false, error: 'Missing reCAPTCHA token' });
       }
 
       try {
+        // ✅ Verify with Google
         const verify = await fetch('https://www.google.com/recaptcha/api/siteverify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -63,11 +64,7 @@ export default async function handler(req, res) {
 
         const verification = await verify.json();
 
-        // --- Debug: Log token + secret status
-        let token = fields["g-recaptcha-response"];
-        if (Array.isArray(token)) token = token[0];
-        console.log("Token received:", token);
-        console.log("Using secret:", process.env.RECAPTCHA_SECRET_KEY ? "✅ Present" : "❌ Missing");
+        // ✅ Debug logging
         console.log("reCAPTCHA verification response:", verification);
         console.log("Verifying domain:", verification.hostname);
         console.log("Verification details:", verification);
@@ -81,12 +78,14 @@ export default async function handler(req, res) {
           });
         }
 
+        // ✅ Parse form fields
         const fullName = fields.name;
         const birthdate = fields.birthdate;
         const birthTime = fields.birthtime;
         const birthPlace = `${fields.birthcity}, ${fields.birthstate}, ${fields.birthcountry}`;
         const email = fields.email;
 
+        // ✅ Generate PDF
         const pdfBuffer = await generatePdfBuffer({
           fullName,
           birthdate,
@@ -95,6 +94,7 @@ export default async function handler(req, res) {
           reading: "Your spiritual insights go here...",
         });
 
+        // ✅ Send email
         await sendEmailWithAttachment({
           to: email,
           subject: '🧘 Your Spiritual Report',
@@ -112,6 +112,7 @@ export default async function handler(req, res) {
           numerologySummary: '🔢 Your numerology summary here...',
           palmSummary: '✋ Your palm reading summary here...',
         });
+
       } catch (e) {
         console.error('❌ Server error:', e);
         return res.status(500).json({ success: false, error: e.message });
