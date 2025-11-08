@@ -1,7 +1,3 @@
-// spiritual-report
-// spiritual-report
-// spiritual-report
-
 import formidable from 'formidable';
 import fs from 'fs';
 import fetch from 'node-fetch';
@@ -14,9 +10,24 @@ export const config = {
   },
 };
 
+// helper to set CORS headers
+function setCorsHeaders(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type,Authorization');
+}
+
 export default async function handler(req, res) {
   try {
-    // Simple GET handler for health check
+    // always send CORS headers
+    setCorsHeaders(res);
+
+    // handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      return res.status(200).end();
+    }
+
+    // Simple GET health check
     if (req.method === 'GET') {
       return res.status(200).json({
         success: true,
@@ -24,7 +35,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // Handle POST requests
+    // Handle POST with form data
     if (req.method === 'POST') {
       const form = new formidable.IncomingForm({ keepExtensions: true });
 
@@ -86,7 +97,6 @@ export default async function handler(req, res) {
             filename: 'Spiritual_Report.pdf',
           });
 
-          // Respond success
           return res.status(200).json({
             success: true,
             astrologySummary: '🌟 Your astrology summary here...',
@@ -98,13 +108,14 @@ export default async function handler(req, res) {
           return res.status(500).json({ success: false, error: innerErr.message });
         }
       });
-      return; // ensure no duplicate response
+      return; // stop execution after form.parse()
     }
 
-    // All other HTTP methods
+    // Any other HTTP method
     return res.status(405).json({ success: false, error: 'Method not allowed' });
   } catch (err) {
     console.error('Fatal error in handler:', err);
+    setCorsHeaders(res);
     return res.status(500).json({ success: false, error: err.message });
   }
 }
