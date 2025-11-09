@@ -1,4 +1,4 @@
-// /api/utils/sendEmail.js
+// new-/api/utils/sendEmail.js
 
 import { Resend } from 'resend';
 
