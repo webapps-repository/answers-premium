@@ -1,4 +1,8 @@
 // /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+
 import { formidable } from "formidable";
 import fs from "fs"; // (kept in case you later use uploaded files)
 import OpenAI from "openai";
