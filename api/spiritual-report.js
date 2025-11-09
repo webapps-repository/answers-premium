@@ -1,19 +1,17 @@
-// /api/spiritual-report.js
+// tabulated /api/spiritual-report.js
+
 import { formidable } from "formidable";
-import fs from "fs";
 import OpenAI from "openai";
 import { generatePdfBuffer } from "./utils/generatePdf.js";
 import { sendEmailWithAttachment } from "./utils/sendEmail.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export const config = {
-  api: { bodyParser: false },
-};
+export const config = { api: { bodyParser: false } };
 
 export default async function handler(req, res) {
-  // --- CORS Headers ---
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  // --- CORS ---
+  res.setHeader("Access-Control-Allow-Origin", "https://zzqejx-u8.myshopify.com");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -23,16 +21,13 @@ export default async function handler(req, res) {
   const form = formidable({ multiples: false, keepExtensions: true });
 
   form.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.error("❌ Form parse error:", err);
-      return res.status(500).json({ success: false, error: "Form parsing failed" });
-    }
+    if (err) return res.status(500).json({ success: false, error: "Form parse failed" });
 
-    // === reCAPTCHA Verification ===
     const token = Array.isArray(fields["g-recaptcha-response"])
       ? fields["g-recaptcha-response"][0]
       : fields["g-recaptcha-response"];
 
+    // --- Verify reCAPTCHA ---
     const verify = await fetch("https://www.google.com/recaptcha/api/siteverify", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -41,139 +36,118 @@ export default async function handler(req, res) {
         response: token,
       }),
     });
-
     const verification = await verify.json();
-    if (!verification.success) {
-      console.error("❌ reCAPTCHA verification failed:", verification);
-      return res.status(403).json({
-        success: false,
-        error: "reCAPTCHA verification failed",
-        details: verification,
-      });
-    }
+    if (!verification.success)
+      return res.status(403).json({ success: false, error: "reCAPTCHA failed", details: verification });
 
-    // === Extract User Data ===
-    const userData = {
+    const user = {
+      question: fields.question,
       fullName: fields.name,
       email: fields.email,
       birthdate: fields.birthdate,
       birthTime: fields.birthtime || "Unknown",
+      birthCity: fields.birthcity,
+      birthState: fields.birthstate,
+      birthCountry: fields.birthcountry,
       birthPlace: `${fields.birthcity}, ${fields.birthstate}, ${fields.birthcountry}`,
-      question: fields.question || "No question provided.",
       submittedAt: new Date().toISOString(),
     };
 
-    console.log(`✅ Verified user: ${userData.fullName}`);
+    console.log(`🔮 Generating report for ${user.fullName}`);
 
-    // === OpenAI Query ===
-    let answer = "Could not generate answer.";
-    let astrology = "No astrology insights available.";
-    let numerology = "No numerology insights available.";
-    let palmistry = "No palmistry insights available.";
+    // --- Generate content via OpenAI ---
+    const prompt = `
+You are a professional spiritual advisor using astrology, numerology, and palmistry.
+Interpret the following details to answer the user's question and create detailed sections.
 
-    try {
-      const prompt = `
-You are a professional spiritual advisor skilled in astrology, numerology, and palmistry.
-Use the following user details to provide a detailed answer to their question.
+Name: ${user.fullName}
+Date of Birth: ${user.birthdate}
+Time of Birth: ${user.birthTime}
+Place of Birth: ${user.birthPlace}
+Question: ${user.question}
+Submission Time: ${user.submittedAt}
 
-User:
-- Name: ${userData.fullName}
-- Date of Birth: ${userData.birthdate}
-- Time of Birth: ${userData.birthTime}
-- Birth Place: ${userData.birthPlace}
-- Question: ${userData.question}
-- Submission Time: ${userData.submittedAt}
-
-Respond in this JSON format:
+Return JSON:
 {
-  "answer": "Direct answer to their question (around 100 words).",
-  "astrology": "Astrological interpretation based on Sun, Moon, Ascendant, and Ruling Planet.",
-  "numerology": "Life path and destiny analysis (around 80 words).",
-  "palmistry": "Interpretation of life line, heart line, and career line (around 80 words)."
+  "answer": "Short paragraph answering the question using personal insights",
+  "astrology": "Detailed astrology interpretation with planetary & rising sign influences",
+  "numerology": "Full analysis including Life Path, Expression, Personality, Soul Urge, and Maturity numbers",
+  "palmistry": "Detailed reading of life, head, heart, and fate lines, and personality traits"
 }`;
 
+    let answer, astrology, numerology, palmistry;
+
+    try {
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
-          { role: "system", content: "You are an expert astrologer, numerologist, and palm reader providing intuitive yet structured insights." },
+          { role: "system", content: "You are an expert spiritual analyst generating deeply personalized readings." },
           { role: "user", content: prompt },
         ],
       });
 
-      const jsonText = completion.choices[0]?.message?.content || "{}";
-      const parsed = JSON.parse(jsonText);
-
-      answer = parsed.answer || answer;
-      astrology = parsed.astrology || astrology;
-      numerology = parsed.numerology || numerology;
-      palmistry = parsed.palmistry || palmistry;
+      const json = JSON.parse(completion.choices[0].message.content || "{}");
+      answer = json.answer || "Could not generate answer.";
+      astrology = json.astrology || "Could not generate astrology insights.";
+      numerology = json.numerology || "Could not generate numerology insights.";
+      palmistry = json.palmistry || "Could not generate palmistry insights.";
     } catch (err) {
-      console.error("❌ OpenAI generation error:", err);
+      console.error("❌ OpenAI error:", err);
+      answer = "OpenAI generation failed.";
     }
 
-    // === PDF Generation ===
+    const reading = { answer, astrology, numerology, palmistry };
+
+    // --- Generate PDF ---
     const pdfBuffer = await generatePdfBuffer({
-      fullName: userData.fullName,
-      birthdate: userData.birthdate,
-      birthTime: userData.birthTime,
-      birthPlace: userData.birthPlace,
-      question: userData.question,
-      answer,
-      astrology,
-      numerology,
-      palmistry,
+      ...user,
+      reading,
     });
 
-    // === Email Body (HTML) ===
-    const htmlBody = `
-      <div style="font-family: Arial, sans-serif; color: #333; max-width: 700px; margin: auto; line-height: 1.6;">
-        <h2 style="text-align:center; color:#6c63ff;">🔮 Your Personalized Spiritual Report</h2>
-
-        <div style="background:#f7f7f7; padding:1rem; border-radius:10px; margin-bottom:1.5rem;">
-          <p><strong>📧 Email:</strong> ${userData.email}</p>
-          <p><strong>🧑 Name:</strong> ${userData.fullName}</p>
-          <p><strong>📅 Birth Date:</strong> ${userData.birthdate}</p>
-          <p><strong>⏰ Birth Time:</strong> ${userData.birthTime}</p>
-          <p><strong>🌍 Birth Place:</strong> ${userData.birthPlace}</p>
-          <p><strong>💭 Question:</strong> ${userData.question}</p>
+    // --- Email body ---
+    const html = `
+      <div style="font-family:Arial, sans-serif;max-width:700px;margin:auto;color:#333;">
+        <h2 style="text-align:center;color:#5a3ec8;">✨ Ask Your Question Report</h2>
+        <div style="background:#f7f5ff;padding:1rem;border-radius:10px;margin:1rem 0;">
+          <p><strong>📅 Submitted:</strong> ${user.submittedAt}</p>
+          <p><strong>🧠 Question:</strong> ${user.question}</p>
+          <p><strong>👤 Name:</strong> ${user.fullName}</p>
+          <p><strong>📧 Email:</strong> ${user.email}</p>
+          <p><strong>📍 Birth Place:</strong> ${user.birthPlace}</p>
         </div>
 
-        <h3 style="color:#4B0082;">💫 Answer to Your Question</h3>
-        <p>${answer}</p>
+        <h3>🔮 Your Answer</h3>
+        <p>${reading.answer}</p>
 
-        <h3 style="color:#4B0082;">🌟 Astrology Insights</h3>
-        <p>${astrology}</p>
+        <h3>🌞 Astrology</h3>
+        <p>${reading.astrology}</p>
 
-        <h3 style="color:#4B0082;">🔢 Numerology Insights</h3>
-        <p>${numerology}</p>
+        <h3>🔢 Numerology</h3>
+        <p>${reading.numerology}</p>
 
-        <h3 style="color:#4B0082;">✋ Palmistry Insights</h3>
-        <p>${palmistry}</p>
+        <h3>✋ Palmistry</h3>
+        <p>${reading.palmistry}</p>
 
-        <p style="margin-top:20px; font-size:0.9rem; color:#555;">
-          ✅ Your full detailed report is attached as a PDF.
-        </p>
-        <p style="text-align:center; margin-top:1.2rem; color:#777;">
-          — Hazcam Spiritual Systems ✨
+        <p style="margin-top:2rem;text-align:center;color:#666;">
+          Attached is your full PDF report 📜
         </p>
       </div>
     `;
 
-    // === Send Email ===
+    // --- Send email ---
     await sendEmailWithAttachment({
-      to: userData.email,
-      subject: "🔮 Your Full Spiritual Report and Personalized Answer",
-      html: htmlBody,
+      to: user.email,
+      subject: "✨ Your Spiritual Report Answer",
+      html,
       buffer: pdfBuffer,
       filename: "Spiritual_Report.pdf",
     });
 
-    console.log(`✅ Report emailed to ${userData.email}`);
+    console.log(`✅ Report sent to ${user.email}`);
 
-    // === Web Response ===
     return res.status(200).json({
       success: true,
-      message: "Report generated successfully.",
+      message: "Report sent successfully.",
       answer,
       astrologySummary: astrology,
       numerologySummary: numerology,
