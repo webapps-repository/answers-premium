@@ -2,35 +2,47 @@
 
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function sendEmailWithAttachment({ to, subject, html, buffer, filename }) {
   try {
-    console.log("📨 Sending email via Resend...");
+    if (!process.env.RESEND_API_KEY) {
+      console.error("❌ RESEND_API_KEY is missing. Email cannot be sent.");
+      throw new Error("Missing RESEND_API_KEY environment variable.");
+    }
+
+    // Initialize Resend client
+    const resend = new Resend(process.env.RESEND_API_KEY);
+
+    console.log("📨 Preparing to send email...");
     console.log("To:", to);
     console.log("Subject:", subject);
-    console.log("Attachment filename:", filename);
+    console.log("From:", 'Spiritual Report <sales@hazcam.io>');
+    console.log("Attachment:", filename || 'none');
 
-    const response = await resend.emails.send({
-      from: 'Spiritual Report <sales@hazcam.io>', // ✅ use your verified sender domain
+    // Construct email payload
+    const emailPayload = {
+      from: 'Spiritual Report <sales@hazcam.io>', // must match verified domain in Resend
       to,
       subject,
-      html, // ✅ HTML body
-      attachments: buffer
-        ? [
-            {
-              filename: filename || 'attachment.pdf',
-              content: buffer.toString('base64'),
-              encoding: 'base64',
-            },
-          ]
-        : [],
-    });
+      html,
+    };
 
-    console.log("✅ Email sent via Resend:", response);
+    // Attach file if provided
+    if (buffer) {
+      emailPayload.attachments = [
+        {
+          filename: filename || 'attachment.pdf',
+          content: buffer, // ✅ Use Buffer directly
+        },
+      ];
+    }
+
+    // Send email via Resend
+    const response = await resend.emails.send(emailPayload);
+
+    console.log("✅ Email successfully sent via Resend:", response.id || response);
     return response;
   } catch (error) {
-    console.error("❌ Failed to send email via Resend:", error);
+    console.error("❌ Email sending failed:", error);
     throw error;
   }
 }
