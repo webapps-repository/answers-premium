@@ -154,7 +154,42 @@ export default async function handler(req, res) {
     await sendEmailWithAttachment({
       to: email,
       subject: "🧘 Your Spiritual Report",
-      html: htmlBody,
+      html: `
+        <div style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; max-width: 650px; margin: auto;">
+          <h2 style="text-align:center; color:#6c63ff;">🔮 Your Spiritual Report</h2>
+    
+          <div style="background:#f9f9f9; padding:1rem; border-radius:10px; margin-bottom:1.2rem;">
+            <p><strong>📧 Email:</strong> ${email}</p>
+            <p><strong>🧑 Name:</strong> ${fullName}</p>
+            <p><strong>📅 Birth Date:</strong> ${birthdate}</p>
+            <p><strong>⏰ Birth Time:</strong> ${birthTime || "Unknown"}</p>
+            <p><strong>🌍 Birth Place:</strong> ${birthPlace}</p>
+          </div>
+    
+          <h3 style="color:#444;">✨ Astrology Insights</h3>
+          <div style="background:#f7f7f7;padding:0.8rem;border-radius:8px;margin-bottom:1rem;">
+            ${reading.astrology}
+          </div>
+    
+          <h3 style="color:#444;">🔢 Numerology Insights</h3>
+          <div style="background:#f7f7f7;padding:0.8rem;border-radius:8px;margin-bottom:1rem;">
+            ${reading.numerology}
+          </div>
+    
+          <h3 style="color:#444;">✋ Palmistry Insights</h3>
+          <div style="background:#f7f7f7;padding:0.8rem;border-radius:8px;margin-bottom:1rem;">
+            ${reading.palmistry}
+          </div>
+    
+          <p style="margin-top:20px; font-size:0.95rem; color:#555;">
+            ✅ A full detailed PDF report has been attached to this email.
+          </p>
+    
+          <p style="margin-top:1.5rem; text-align:center; color:#777;">
+            <em>— Hazcam Spiritual Systems ✨</em>
+          </p>
+        </div>
+      `,
       buffer: pdfBuffer,
       filename: "Spiritual_Report.pdf",
     });
