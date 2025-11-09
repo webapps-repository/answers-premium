@@ -1,84 +1,137 @@
-// tabulated /api/utils/generatePdf.js
-
+// /api/utils/generatePdf.js
 import PDFDocument from "pdfkit";
 import getStream from "get-stream";
+import { pdfmetrics } from "pdfkit/js/data/core";
 
 export async function generatePdfBuffer({
   fullName,
   birthdate,
   birthTime,
   birthPlace,
+  question,
   reading = {},
 }) {
   const doc = new PDFDocument({ margin: 50 });
   const chunks = [];
+
   doc.on("data", (chunk) => chunks.push(chunk));
-  doc.on("end", () => console.log("✅ PDF generated"));
+  doc.on("end", () => console.log("✅ PDF generation complete"));
 
-  const divider = (title) => {
-    doc.fontSize(16).fillColor("#5a3ec8").text(title, { underline: true }).moveDown(0.5);
-  };
-
+  // --- Title ---
   doc
     .fontSize(22)
     .fillColor("#4B0082")
-    .text("✨ Spiritual Report: Ask Your Question", { align: "center" })
-    .moveDown(1);
+    .text("🌌 Personal Spiritual Report", { align: "center" })
+    .moveDown(1.2);
 
-  doc.fontSize(13).fillColor("#000");
-  doc.text(`👤 Name: ${fullName}`);
+  // --- Personal Info ---
+  doc.fontSize(12).fillColor("#000");
+  doc.text(`🧑 Name: ${fullName}`);
   doc.text(`📅 Birth Date: ${birthdate}`);
-  doc.text(`⏰ Birth Time: ${birthTime}`);
-  doc.text(`🌍 Birth Place: ${birthPlace}`).moveDown(1);
+  doc.text(`⏰ Birth Time: ${birthTime || "Unknown"}`);
+  doc.text(`🌍 Birth Place: ${birthPlace}`);
+  doc.text(`💭 Question: ${question || "—"}`).moveDown(1.5);
 
-  divider("💫 Answer to Your Question");
-  doc.fontSize(12).fillColor("#333").text(reading.answer || "No answer available.").moveDown(1);
+  // Helper: table row generator
+  const drawTable = (rows) => {
+    const tableTop = doc.y;
+    const rowHeight = 20;
+    const col1Width = 180;
+    const col2Width = 350;
 
-  divider("🌞 Astrology Report");
-  doc.fontSize(12).text(reading.astrology || "No astrology data available.").moveDown(0.5);
-  doc.text("Significance & Key Aspects", { underline: true }).moveDown(0.3);
+    rows.forEach((row, i) => {
+      const y = tableTop + i * rowHeight;
+      if (i % 2 === 0) {
+        doc.rect(50, y, col1Width + col2Width, rowHeight).fill("#f9f9f9");
+      }
+      doc
+        .fillColor("#000")
+        .fontSize(11)
+        .text(row[0], 55, y + 5, { width: col1Width })
+        .text(row[1], 55 + col1Width, y + 5, { width: col2Width });
+      doc.fillColor("#000");
+    });
+    doc.moveDown(rows.length * 0.25 + 1);
+  };
 
-  const astrologyTable = [
-    ["Planetary Positions", "Influence of celestial positions on personality"],
-    ["Ascendant Sign", "Your outer personality and approach to life"],
-    ["Astrological Houses", "Domains of life energy and experience"],
-    ["Career & Work", "Influence on professional growth"],
-    ["Love & Relationships", "Emotional compatibility and bonding"],
-    ["Health & Wellbeing", "Vitality and self-care tendencies"],
-  ];
+  // --- 🪐 Astrology Table ---
+  doc
+    .fontSize(16)
+    .fillColor("#4B0082")
+    .text("☀️ Astrology Insights", { underline: true })
+    .moveDown(0.6);
 
-  astrologyTable.forEach(([a, b]) => doc.text(`• ${a}: ${b}`));
-  doc.moveDown(1);
+  drawTable([
+    ["🌞 The Sun", "Represents your core identity, motivation, and vitality."],
+    ["🌙 The Moon", "Reflects emotions, instincts, and your inner world."],
+    ["🌅 Rising Sign (Ascendant)", "Shows how you present yourself to the world."],
+    ["🪐 Ruling Planet", "The planet that defines your chart’s tone and personal approach."],
+    ["🏠 Astrological Houses", "Show where life themes play out—career, family, relationships, etc."],
+    ["❤️ Love House", "Indicates romantic tendencies and relationship dynamics."],
+    ["💼 Career & Business", "Describes ambition, public image, and work motivation."],
+    ["💫 Health & Wellbeing", "Predicts vitality and physical-emotional balance."],
+  ]);
 
-  divider("🔢 Numerology Report");
-  const numerologyTable = [
-    ["Life Path", "Represents your life journey and purpose"],
-    ["Expression", "Reveals your talents and personality"],
-    ["Personality", "How others perceive you"],
-    ["Soul Urge", "Your inner motivations and desires"],
-    ["Maturity", "Your evolving life lessons"],
-  ];
-  numerologyTable.forEach(([a, b]) => doc.text(`• ${a}: ${b}`));
-  doc.moveDown(1);
+  doc
+    .moveDown(0.5)
+    .fontSize(11)
+    .fillColor("#333")
+    .text(reading.astrology || "Astrology interpretation unavailable.")
+    .moveDown(1.5);
 
-  divider("✋ Palmistry Report");
-  const palmistryTable = [
-    ["Life Line", "Vitality, stamina, and health"],
-    ["Head Line", "Mental focus, decisions, and clarity"],
-    ["Heart Line", "Emotions, relationships, and empathy"],
-    ["Fate Line", "Career direction and life changes"],
-    ["Fingers", "Traits and characteristics"],
-    ["Mounts", "Potential areas of strength"],
-  ];
-  palmistryTable.forEach(([a, b]) => doc.text(`• ${a}: ${b}`));
+  // --- 🔢 Numerology Table ---
+  doc
+    .fontSize(16)
+    .fillColor("#4B0082")
+    .text("🔢 Numerology Insights", { underline: true })
+    .moveDown(0.6);
 
-  doc.moveDown(2);
+  drawTable([
+    ["1️⃣ Life Path Number", "Defines your purpose and spiritual direction in this lifetime."],
+    ["2️⃣ Expression Number", "Shows your natural talents and abilities."],
+    ["3️⃣ Personality Number", "Indicates how others perceive your outward personality."],
+    ["4️⃣ Soul Urge Number", "Reveals your deepest desires and inner motivations."],
+    ["5️⃣ Maturity Number", "Represents the wisdom you develop later in life."],
+  ]);
+
+  doc
+    .moveDown(0.5)
+    .fontSize(11)
+    .fillColor("#333")
+    .text(reading.numerology || "Numerology interpretation unavailable.")
+    .moveDown(1.5);
+
+  // --- ✋ Palmistry Table ---
+  doc
+    .fontSize(16)
+    .fillColor("#4B0082")
+    .text("✋ Palmistry Insights", { underline: true })
+    .moveDown(0.6);
+
+  drawTable([
+    ["Life Line", "Vitality & stamina — long/deep means robust health, short shows independence."],
+    ["Head Line", "Intellect & mental focus — deep means clarity, wavy shows creativity."],
+    ["Heart Line", "Emotions & relationships — breaks show challenges, smoothness means harmony."],
+    ["Fate Line", "Career & destiny — clear indicates strong purpose, broken shows change."],
+    ["Fingers", "Each finger reveals traits: thumb=willpower, index=ambition, ring=creativity."],
+    ["Mounts", "Areas of potential: Jupiter=leadership, Venus=love, Luna=intuition."],
+  ]);
+
+  doc
+    .moveDown(0.5)
+    .fontSize(11)
+    .fillColor("#333")
+    .text(reading.palmistry || "Palmistry interpretation unavailable.")
+    .moveDown(2);
+
+  // --- Footer ---
   doc
     .fontSize(10)
-    .fillColor("#777")
-    .text("Generated by Hazcam Spiritual Systems • Powered by OpenAI", {
-      align: "center",
-    });
+    .fillColor("#888")
+    .text(
+      "✨ Generated by Hazcam Spiritual Systems — combining astrology, numerology, and palmistry for personal insight.",
+      { align: "center" }
+    );
 
   doc.end();
   return await getStream.buffer(doc);
