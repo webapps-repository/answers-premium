@@ -1,153 +1,237 @@
 // /api/utils/generatePdf.js
 import getStream from "get-stream";
 
-// ✅ Dynamically import pdfkit (works on Vercel)
+// ✅ Vercel-safe dynamic import (no internal pdfkit paths)
 let PDFDocument;
 try {
-  PDFDocument = (await import("pdfkit")).default;
+  PDFDocument = (await import("pdfkit")).default; // works with pdfkit@0.17.x
 } catch (err) {
   console.error("❌ Failed to load PDFKit:", err);
   throw err;
 }
 
+/**
+ * Build a two-column table with static left labels and dynamic right meanings.
+ * - Rows: array of [label, value] pairs (value can be long text).
+ * - Handles basic page breaks if near bottom of page.
+ */
+function drawTwoColTable(doc, rows, opts = {}) {
+  const {
+    left = 50,
+    top = doc.y,
+    col1Width = 200,
+    col2Width = 340,
+    rowHeight = 24,
+    stripeColor = "#F8F8FF",
+    textSize = 11,
+  } = opts;
+
+  const pageBottom = doc.page.height - doc.page.margins.bottom;
+
+  rows.forEach((row, i) => {
+    const neededHeight = rowHeight; // simple heuristic; paragraphs wrap anyway
+    if (doc.y + neededHeight > pageBottom - 20) {
+      doc.addPage();
+    }
+
+    const y = doc.y;
+
+    // alternating stripe
+    if (i % 2 === 0) {
+      doc.save().rect(left, y, col1Width + col2Width, rowHeight).fill(stripeColor).restore();
+    }
+
+    doc
+      .fontSize(textSize)
+      .fillColor("#111")
+      .text(String(row[0] ?? ""), left + 6, y + 6, { width: col1Width - 12 })
+      .text(String(row[1] ?? ""), left + col1Width + 10, y + 6, { width: col2Width - 16 });
+
+    // advance to next "row"
+    doc.y = y + rowHeight;
+  });
+
+  // spacing after table
+  doc.moveDown(1.2);
+}
+
+function drawSectionHeading(doc, title) {
+  const pageBottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + 40 > pageBottom) doc.addPage();
+
+  doc
+    .moveDown(0.3)
+    .fontSize(16)
+    .fillColor("#4B0082")
+    .text(title, { underline: true })
+    .moveDown(0.4);
+}
+
+function drawParagraph(doc, text, size = 12, color = "#333") {
+  const pageBottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + 40 > pageBottom) doc.addPage();
+
+  doc.fontSize(size).fillColor(color).text(text || "—").moveDown(0.8);
+}
+
 export async function generatePdfBuffer({
+  // Personal details
   fullName,
   birthdate,
   birthTime,
   birthPlace,
   question,
-  answer,
-  astrology,
-  numerology,
-  palmistry,
+
+  // Section summaries (plain text)
+  answer,       // the direct answer to the question
+  astrology,    // summary paragraph above Astrology table
+  numerology,   // summary paragraph above Numerology table
+  palmistry,    // summary paragraph above Palmistry table
+
+  // Optional granular per-row meanings (right-hand column content)
+  astroDetails = {},
+  numDetails = {},
+  palmDetails = {},
 }) {
   const doc = new PDFDocument({ margin: 50 });
   const chunks = [];
 
-  doc.on("data", (chunk) => chunks.push(chunk));
+  doc.on("data", (c) => chunks.push(c));
   doc.on("end", () => console.log("✅ PDF generation complete"));
 
-  // --- Header ---
+  // ====== Title ======
   doc
     .fontSize(22)
     .fillColor("#4B0082")
-    .text("🌌 Personal Spiritual Report", { align: "center" })
-    .moveDown(1.2);
+    .text("Your Question — Personalized Spiritual Report", { align: "center" })
+    .moveDown(1.0);
 
-  // --- User Info ---
-  doc.fontSize(12).fillColor("#000");
-  doc.text(`🧑 Name: ${fullName}`);
-  doc.text(`📅 Birth Date: ${birthdate}`);
-  doc.text(`⏰ Birth Time: ${birthTime || "Unknown"}`);
-  doc.text(`🌍 Birth Place: ${birthPlace}`);
-  doc.text(`💭 Question: ${question || "—"}`).moveDown(1.2);
+  // ====== User Details ======
+  doc.fontSize(12).fillColor("#111");
+  doc.text(`👤 Name: ${fullName || "—"}`);
+  doc.text(`📅 Date of Birth: ${birthdate || "—"}`);
+  doc.text(`⏰ Time of Birth: ${birthTime || "Unknown"}`);
+  doc.text(`🌍 Birth Place: ${birthPlace || "—"}`);
+  doc.text(`💭 Question: ${question || "—"}`).moveDown(1.0);
 
-  // --- Answer Section ---
+  // ====== Direct Answer ======
+  drawSectionHeading(doc, "🔮 Answer to Your Question");
+  drawParagraph(doc, answer || "No answer available.");
+
+  // ====== Astrology Section ======
+  drawSectionHeading(doc, "☀️ Astrology");
+  // Summary paragraph above the table
+  drawParagraph(doc, astrology || "Astrology interpretation unavailable.");
+
+  // Static left column labels; dynamic right column from astroDetails or fallbacks
+  const astrologyRows = [
+    [
+      "🌐 Planetary Positions",
+      astroDetails["Planetary Positions"] || "See summary above.",
+    ],
+    [
+      "🌅 Ascendant (Rising) Zodiac Sign",
+      astroDetails["Ascendant (Rising) Zodiac Sign"] || "See summary above.",
+    ],
+    [
+      "🏠 Astrological Houses",
+      astroDetails["Astrological Houses"] || "See summary above.",
+    ],
+    [
+      "👪 Family Astrology",
+      astroDetails["Family Astrology"] || "See summary above.",
+    ],
+    [
+      "❤️ Love Governing House in Astrology",
+      astroDetails["Love Governing House in Astrology"] || "See summary above.",
+    ],
+    [
+      "💫 Health & Wellbeing Predictions",
+      astroDetails["Health & Wellbeing Predictions"] || "See summary above.",
+    ],
+    [
+      "💼 Astrological influences on Work, Career and Business",
+      astroDetails["Astrological influences on Work, Career and Business"] || "See summary above.",
+    ],
+  ];
+
+  drawTwoColTable(doc, astrologyRows);
+
+  // ====== Numerology Section ======
+  drawSectionHeading(doc, "🔢 Numerology");
+  drawParagraph(doc, numerology || "Numerology interpretation unavailable.");
+
+  const numerologyRows = [
+    [
+      "1️⃣ Life Path Number",
+      numDetails["Life Path Number"] || "See summary above.",
+    ],
+    [
+      "2️⃣ Expression Number",
+      numDetails["Expression Number"] || "See summary above.",
+    ],
+    [
+      "3️⃣ Personality Number",
+      numDetails["Personality Number"] || "See summary above.",
+    ],
+    [
+      "4️⃣ Soul Urge Number",
+      numDetails["Soul Urge Number"] || "See summary above.",
+    ],
+    [
+      "5️⃣ Maturity Number",
+      numDetails["Maturity Number"] || "See summary above.",
+    ],
+  ];
+
+  drawTwoColTable(doc, numerologyRows);
+
+  // ====== Palmistry Section ======
+  drawSectionHeading(doc, "✋ Palmistry");
+  drawParagraph(doc, palmistry || "Palmistry interpretation unavailable.");
+
+  const palmistryRows = [
+    [
+      "🫀 Life Line",
+      palmDetails["Life Line"]
+        || "Physical vitality & stamina. Long/deep: robust health. Short/fragmented: independence; possible dips in energy.",
+    ],
+    [
+      "🧠 Head Line",
+      palmDetails["Head Line"]
+        || "Intellect & mindset. Deep: clarity/focus. Wavy: creativity. Straight: practical. Breaks/crosses: mental shifts.",
+    ],
+    [
+      "💞 Heart Line",
+      palmDetails["Heart Line"]
+        || "Emotions & relationships. Deep: strong capacity; breaks: turning points. Wavy: passionate/complex emotional life.",
+    ],
+    [
+      "🧭 Fate Line",
+      palmDetails["Fate Line"]
+        || "Career & destiny. Clear/deep: purpose and direction. Broken: changes in career path; multiple lines: multiple callings.",
+    ],
+    [
+      "🤲 Fingers",
+      palmDetails["Fingers"]
+        || "Thumb=willpower; Index=ambition/leadership; Middle=responsibility; Ring=creativity; Pinky=communication/social.",
+    ],
+    [
+      "🌕 Mounts",
+      palmDetails["Mounts"]
+        || "Jupiter=leadership; Venus=love/affection; Luna=intuition/creativity. Highlights areas of latent potential.",
+    ],
+  ];
+
+  drawTwoColTable(doc, palmistryRows);
+
+  // ====== Footer ======
   doc
-    .fontSize(16)
-    .fillColor("#4B0082")
-    .text("🔮 Answer to Your Question", { underline: true })
-    .moveDown(0.5);
-  doc.fontSize(12).fillColor("#333").text(answer || "No answer available.").moveDown(1.5);
-
-  // Helper to draw simple tables
-  const drawTable = (rows) => {
-    const startY = doc.y;
-    const rowHeight = 22;
-    const col1Width = 160;
-    const col2Width = 360;
-    const tableLeft = 50;
-
-    rows.forEach((row, i) => {
-      const y = startY + i * rowHeight;
-      // alternate row shading
-      if (i % 2 === 0) {
-        doc.rect(tableLeft, y, col1Width + col2Width, rowHeight).fill("#f8f8ff");
-      }
-      doc
-        .fillColor("#000")
-        .fontSize(11)
-        .text(row[0], tableLeft + 5, y + 5, { width: col1Width })
-        .text(row[1], tableLeft + col1Width + 10, y + 5, { width: col2Width });
-      doc.fillColor("#000");
-    });
-
-    doc.moveDown(rows.length * 0.25 + 1.5);
-  };
-
-  // --- 🪐 Astrology Table ---
-  doc
-    .fontSize(16)
-    .fillColor("#4B0082")
-    .text("☀️ Astrology Insights", { underline: true })
-    .moveDown(0.5);
-
-  drawTable([
-    ["🌞 The Sun", "Core identity, vitality, and self-expression."],
-    ["🌙 The Moon", "Emotions, instincts, and inner world."],
-    ["🌅 Rising Sign (Ascendant)", "How others perceive you; your approach to new situations."],
-    ["🪐 Ruling Planet", "Defines your overall life tone and approach."],
-    ["🏠 Astrological Houses", "Show where life themes play out (career, home, relationships)."],
-    ["❤️ Love House", "Indicates romantic energy and emotional connection patterns."],
-    ["💼 Career & Business", "Ambition, reputation, and public image indicators."],
-    ["💫 Health & Wellbeing", "Predicts vitality and personal balance across life cycles."],
-  ]);
-
-  doc
-    .fontSize(11)
-    .fillColor("#333")
-    .text(astrology || "Astrology interpretation unavailable.")
-    .moveDown(1.5);
-
-  // --- 🔢 Numerology Table ---
-  doc
-    .fontSize(16)
-    .fillColor("#4B0082")
-    .text("🔢 Numerology Insights", { underline: true })
-    .moveDown(0.5);
-
-  drawTable([
-    ["1️⃣ Life Path Number", "Your core life purpose and spiritual path."],
-    ["2️⃣ Expression Number", "Natural talents, potential, and outward capabilities."],
-    ["3️⃣ Personality Number", "How others perceive your personality and energy."],
-    ["4️⃣ Soul Urge Number", "Your innermost desires and emotional motivations."],
-    ["5️⃣ Maturity Number", "The wisdom and fulfillment gained later in life."],
-  ]);
-
-  doc
-    .fontSize(11)
-    .fillColor("#333")
-    .text(numerology || "Numerology interpretation unavailable.")
-    .moveDown(1.5);
-
-  // --- ✋ Palmistry Table ---
-  doc
-    .fontSize(16)
-    .fillColor("#4B0082")
-    .text("✋ Palmistry Insights", { underline: true })
-    .moveDown(0.5);
-
-  drawTable([
-    ["🫀 Life Line", "Vitality & stamina — long/deep means robust health, short shows independence."],
-    ["🧠 Head Line", "Intellect & focus — deep = clarity, wavy = creativity, breaks = mental shifts."],
-    ["💞 Heart Line", "Emotional & love life — deep = passion, breaks = emotional turning points."],
-    ["🧭 Fate Line", "Career & destiny — clear = purpose, broken = major life changes."],
-    ["🤲 Fingers", "Each finger highlights traits: thumb=willpower, index=ambition, ring=creativity."],
-    ["🌕 Mounts", "Jupiter=leadership, Venus=love, Luna=intuition — reveal areas of strength."],
-  ]);
-
-  doc
-    .fontSize(11)
-    .fillColor("#333")
-    .text(palmistry || "Palmistry interpretation unavailable.")
-    .moveDown(1.8);
-
-  // --- Footer ---
-  doc
+    .moveDown(0.8)
     .fontSize(10)
     .fillColor("#777")
     .text(
-      "✨ Generated by Hazcam Spiritual Systems — merging astrology, numerology & palmistry for insight ✨",
+      "Generated by Hazcam Spiritual Systems — standardized layout with personalized meanings.",
       { align: "center" }
     );
 
