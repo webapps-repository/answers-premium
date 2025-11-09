@@ -1,55 +1,58 @@
 // /api/utils/generatePdf.js
 import getStream from "get-stream";
 
+// Dynamic import is safest on Vercel
 let PDFDocument;
 try {
-  PDFDocument = (await import("pdfkit")).default;
+  PDFDocument = (await import("pdfkit")).default; // pdfkit ^0.17.x
 } catch (err) {
-  console.error("❌ Failed to load pdfkit:", err);
+  console.error("Failed to load PDFKit:", err);
   throw err;
 }
 
-function drawParagraph(doc, text) {
-  doc
-    .font("Helvetica")
-    .fontSize(12)
-    .fillColor("#222")
-    .lineGap(6)
-    .text(text || "—", { align: "left" })
-    .moveDown(1);
-}
+// Approximate 1.5 line spacing via lineGap
+const LINE_GAP = 6; // works well for 12pt text
 
-function drawSectionTitle(doc, title) {
+function heading(doc, text) {
+  maybePageBreak(doc, 42);
   doc
-    .moveDown(0.4)
-    .font("Helvetica-Bold")
-    .fontSize(16)
+    .moveDown(0.2)
+    .fontSize(18)
     .fillColor("#4B0082")
-    .text(title, { underline: true })
+    .text(text, { underline: true })
     .moveDown(0.4);
 }
 
-function drawTable(doc, rows) {
-  const leftX = 50;
-  const col1Width = 180;
-  const col2Width = 330;
-  const rowHeight = 26;
-  const stripe = "#f5f5ff";
+function subheading(doc, text) {
+  maybePageBreak(doc, 28);
+  doc
+    .fontSize(13)
+    .fillColor("#4B0082")
+    .text(text)
+    .moveDown(0.1);
+}
 
-  rows.forEach((row, i) => {
-    const y = doc.y;
-    if (i % 2 === 0) {
-      doc.save().rect(leftX, y, col1Width + col2Width, rowHeight).fill(stripe).restore();
-    }
-    doc
-      .font("Helvetica")
-      .fontSize(12)
-      .fillColor("#000")
-      .text(row[0], leftX + 6, y + 6, { width: col1Width - 12 })
-      .text(row[1], leftX + col1Width + 10, y + 6, { width: col2Width - 16 });
-    doc.y = y + rowHeight;
+function paragraph(doc, text = "") {
+  maybePageBreak(doc, 60);
+  doc
+    .fontSize(12)
+    .fillColor("#222")
+    .text(text || "—", { lineGap: LINE_GAP })
+    .moveDown(0.2);
+}
+
+function detailsBlock(doc, kvPairs = []) {
+  kvPairs.forEach(([label, value]) => {
+    maybePageBreak(doc, 24);
+    doc.fontSize(12).fillColor("#222")
+      .text(`${label}: ${value || "—"}`, { lineGap: LINE_GAP });
   });
-  doc.moveDown(1.2);
+  doc.moveDown(0.4);
+}
+
+function maybePageBreak(doc, needed = 40) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + needed > bottom) doc.addPage();
 }
 
 export async function generatePdfBuffer({
@@ -58,94 +61,136 @@ export async function generatePdfBuffer({
   birthTime,
   birthPlace,
   question,
+
+  // narrative content from OpenAI
   answer,
-  astrology,
-  numerology,
-  palmistry,
-  astroDetails = {},
-  numDetails = {},
-  palmDetails = {},
+  astrology = {},
+  numerology = {},
+  palmistry = {},
 }) {
   const doc = new PDFDocument({ margin: 50 });
   const chunks = [];
   doc.on("data", (c) => chunks.push(c));
-  doc.on("end", () => console.log("✅ PDF generation complete"));
+  doc.on("end", () => console.log("PDF generation complete"));
 
-  doc.font("Helvetica").fontSize(12).fillColor("#111").lineGap(6);
-
-  // --- Header ---
+  // Title
   doc
-    .font("Helvetica-Bold")
     .fontSize(22)
     .fillColor("#4B0082")
     .text("Personal Spiritual Report", { align: "center" })
-    .moveDown(1.2);
+    .moveDown(0.8);
 
+  // Details (no icons; full width)
+  detailsBlock(doc, [
+    ["Name", fullName],
+    ["Date of Birth", birthdate],
+    ["Time of Birth", birthTime || "Unknown"],
+    ["Birth Place", birthPlace],
+    ["Question", question || "—"],
+  ]);
+
+  // Answer
+  heading(doc, "Answer to Your Question");
+  paragraph(doc, answer);
+
+  // Astrology (summary + subsections)
+  heading(doc, "Astrology");
+  paragraph(doc, astrology.summary);
+
+  subheading(doc, "Planetary Positions");
+  paragraph(doc, astrology.planetaryPositions);
+
+  subheading(doc, "Ascendant (Rising)");
+  paragraph(doc, astrology.ascendant);
+
+  subheading(doc, "Houses");
+  paragraph(doc, astrology.houses);
+
+  subheading(doc, "Family");
+  paragraph(doc, astrology.family);
+
+  subheading(doc, "Love");
+  paragraph(doc, astrology.loveHouse);
+
+  subheading(doc, "Health & Wellbeing");
+  paragraph(doc, astrology.health);
+
+  subheading(doc, "Work, Career & Business");
+  paragraph(doc, astrology.career);
+
+  // Numerology (full-width narrative)
+  heading(doc, "Numerology");
+  paragraph(doc, numerology.summary);
+
+  subheading(doc, "Life Path");
+  paragraph(doc, numerology.lifePath);
+
+  subheading(doc, "Expression");
+  paragraph(doc, numerology.expression);
+
+  subheading(doc, "Personality");
+  paragraph(doc, numerology.personality);
+
+  subheading(doc, "Soul Urge");
+  paragraph(doc, numerology.soulUrge);
+
+  subheading(doc, "Maturity");
+  paragraph(doc, numerology.maturity);
+
+  // Palmistry (full-width narrative)
+  heading(doc, "Palmistry");
+  paragraph(doc, palmistry.summary);
+
+  subheading(doc, "Life Line");
+  paragraph(doc, palmistry.lifeLine);
+
+  subheading(doc, "Head Line");
+  paragraph(doc, palmistry.headLine);
+
+  subheading(doc, "Heart Line");
+  paragraph(doc, palmistry.heartLine);
+
+  subheading(doc, "Fate Line");
+  paragraph(doc, palmistry.fateLine);
+
+  subheading(doc, "Thumb");
+  paragraph(doc, palmistry.thumb);
+
+  subheading(doc, "Index Finger");
+  paragraph(doc, palmistry.indexFinger);
+
+  subheading(doc, "Middle Finger");
+  paragraph(doc, palmistry.middleFinger);
+
+  subheading(doc, "Ring Finger");
+  paragraph(doc, palmistry.ringFinger);
+
+  subheading(doc, "Pinky Finger");
+  paragraph(doc, palmistry.pinkyFinger);
+
+  subheading(doc, "Mounts");
+  paragraph(doc, palmistry.mounts);
+
+  subheading(doc, "Marriage / Relationship");
+  paragraph(doc, palmistry.marriage);
+
+  subheading(doc, "Children");
+  paragraph(doc, palmistry.children);
+
+  subheading(doc, "Travel Lines");
+  paragraph(doc, palmistry.travelLines);
+
+  subheading(doc, "Stress Lines");
+  paragraph(doc, palmistry.stressLines);
+
+  // Footer
   doc
-    .font("Helvetica")
-    .fontSize(12)
-    .fillColor("#111")
-    .text(`Name: ${fullName}`)
-    .text(`Date of Birth: ${birthdate}`)
-    .text(`Time of Birth: ${birthTime}`)
-    .text(`Birth Place: ${birthPlace}`)
-    .text(`Question: ${question}`)
-    .moveDown(1);
-
-  // --- Answer ---
-  drawSectionTitle(doc, "Answer to Your Question");
-  drawParagraph(doc, answer);
-
-  // --- Astrology ---
-  drawSectionTitle(doc, "Astrology");
-  drawParagraph(doc, astrology);
-
-  drawTable(doc, [
-    ["Planetary Positions", astroDetails["Planetary Positions"] || ""],
-    ["Ascendant (Rising) Zodiac Sign", astroDetails["Ascendant (Rising) Zodiac Sign"] || ""],
-    ["Astrological Houses", astroDetails["Astrological Houses"] || ""],
-    ["Family Astrology", astroDetails["Family Astrology"] || ""],
-    ["Love Governing House in Astrology", astroDetails["Love Governing House in Astrology"] || ""],
-    ["Health & Wellbeing Predictions", astroDetails["Health & Wellbeing Predictions"] || ""],
-    ["Astrological influences on Work, Career and Business", astroDetails["Astrological influences on Work, Career and Business"] || ""],
-  ]);
-
-  // --- Numerology ---
-  drawSectionTitle(doc, "Numerology");
-  drawParagraph(doc, numerology);
-
-  drawTable(doc, [
-    ["Life Path Number", numDetails["Life Path Number"] || ""],
-    ["Expression Number", numDetails["Expression Number"] || ""],
-    ["Personality Number", numDetails["Personality Number"] || ""],
-    ["Soul Urge Number", numDetails["Soul Urge Number"] || ""],
-    ["Maturity Number", numDetails["Maturity Number"] || ""],
-  ]);
-
-  // --- Palmistry ---
-  drawSectionTitle(doc, "Palmistry");
-  drawParagraph(doc, palmistry);
-
-  drawTable(doc, [
-    ["Life Line", palmDetails["Life Line"] || ""],
-    ["Head Line", palmDetails["Head Line"] || ""],
-    ["Heart Line", palmDetails["Heart Line"] || ""],
-    ["Fate Line", palmDetails["Fate Line"] || ""],
-    ["Thumb", palmDetails["Thumb"] || ""],
-    ["Index Finger", palmDetails["Index Finger"] || ""],
-    ["Ring Finger", palmDetails["Ring Finger"] || ""],
-    ["Mounts", palmDetails["Mounts"] || ""],
-    ["Marriage / Relationship", palmDetails["Marriage / Relationship"] || ""],
-    ["Children", palmDetails["Children"] || ""],
-    ["Travel Lines", palmDetails["Travel Lines"] || ""],
-    ["Stress Lines", palmDetails["Stress Lines"] || ""],
-  ]);
-
-  doc
-    .moveDown(1)
+    .moveDown(0.6)
     .fontSize(10)
-    .fillColor("#777")
-    .text("This report is for entertainment purposes only.", { align: "center" });
+    .fillColor("#666")
+    .text("This report is for informational and entertainment purposes only.", {
+      align: "center",
+    });
 
   doc.end();
   return await getStream.buffer(doc);
