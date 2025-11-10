@@ -1,51 +1,21 @@
 // /api/spiritual-report.js
 import { formidable } from "formidable";
+import fs from "fs";
 import OpenAI from "openai";
 import { generatePdfBuffer } from "./utils/generatePdf.js";
 import { sendEmailWithAttachment } from "./utils/sendEmail.js";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-export const config = { api: { bodyParser: false } };
 
-// === Numerology helper (Pythagorean method) ===
-function calcPythagoreanValue(str) {
-  const table = {
-    A:1,B:2,C:3,D:4,E:5,F:6,G:7,H:8,I:9,
-    J:1,K:2,L:3,M:4,N:5,O:6,P:7,Q:8,R:9,
-    S:1,T:2,U:3,V:4,W:5,X:6,Y:7,Z:8,
-  };
-  return str
-    .toUpperCase()
-    .replace(/[^A-Z]/g, "")
-    .split("")
-    .reduce((sum, ch) => sum + (table[ch] || 0), 0);
-}
-function reduceToSingleDigit(n) {
-  while (n > 9 && n !== 11 && n !== 22 && n !== 33) {
-    n = n.toString().split("").reduce((a, b) => a + Number(b), 0);
-  }
-  return n;
-}
-function calcLifePath(birthdate) {
-  const digits = birthdate.replace(/[^0-9]/g, "");
-  const sum = digits.split("").reduce((a, b) => a + Number(b), 0);
-  return reduceToSingleDigit(sum);
-}
-function calcExpression(name) {
-  return reduceToSingleDigit(calcPythagoreanValue(name));
-}
-function calcSoulUrge(name) {
-  const vowels = name.match(/[AEIOU]/gi) || [];
-  const value = vowels.reduce((sum, ch) => sum + calcPythagoreanValue(ch), 0);
-  return reduceToSingleDigit(value);
-}
-function calcPersonality(name) {
-  const consonants = name.match(/[^AEIOU\s]/gi) || [];
-  const value = consonants.reduce((sum, ch) => sum + calcPythagoreanValue(ch), 0);
-  return reduceToSingleDigit(value);
-}
-function calcMaturity(life, expr) {
-  return reduceToSingleDigit(life + expr);
+export const config = {
+  api: { bodyParser: false },
+};
+
+// ✅ Simple date formatter for PDF + Email
+function formatDate(dateStr) {
+  if (!dateStr) return "—";
+  const [year, month, day] = dateStr.split("-");
+  return `${day}-${month}-${year}`;
 }
 
 export default async function handler(req, res) {
@@ -54,17 +24,22 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ success: false, error: "Method not allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ success: false, error: "Method not allowed" });
 
-  // === Parse Form Data ===
   const form = formidable({ multiples: false, keepExtensions: true });
-  form.parse(req, async (err, fields) => {
-    if (err) return res.status(500).json({ success: false, error: "Form parsing failed" });
 
-    // === reCAPTCHA ===
+  form.parse(req, async (err, fields, files) => {
+    if (err) {
+      console.error("❌ Form parse error:", err);
+      return res.status(500).json({ success: false, error: "Form parsing failed" });
+    }
+
+    // === reCAPTCHA Verification ===
     const token = Array.isArray(fields["g-recaptcha-response"])
       ? fields["g-recaptcha-response"][0]
       : fields["g-recaptcha-response"];
+
     const verify = await fetch("https://www.google.com/recaptcha/api/siteverify", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -73,9 +48,16 @@ export default async function handler(req, res) {
         response: token,
       }),
     });
+
     const verification = await verify.json();
-    if (!verification.success)
-      return res.status(403).json({ success: false, error: "reCAPTCHA verification failed" });
+    if (!verification.success) {
+      console.error("❌ reCAPTCHA verification failed:", verification);
+      return res.status(403).json({
+        success: false,
+        error: "reCAPTCHA verification failed",
+        details: verification,
+      });
+    }
 
     // === Extract User Data ===
     const userData = {
@@ -88,110 +70,122 @@ export default async function handler(req, res) {
       submittedAt: new Date().toISOString(),
     };
 
-    // === Deterministic numerology ===
-    const lifePath = calcLifePath(userData.birthdate);
-    const expression = calcExpression(userData.fullName);
-    const soulUrge = calcSoulUrge(userData.fullName);
-    const personality = calcPersonality(userData.fullName);
-    const maturity = calcMaturity(lifePath, expression);
-    const numValues = { lifePath, expression, personality, soulUrge, maturity };
+    console.log(`✅ Verified user: ${userData.fullName}`);
 
-    // === OpenAI Prompt ===
-    const prompt = `
-You are a professional spiritual advisor using Western astrology and Pythagorean numerology.
-Interpret each section concisely in ~100 words each, tailored to the user's question.
-Provide the response as strict JSON in this structure:
+    // === OpenAI Query ===
+    let answer = "Could not generate answer.";
+    let astrology = "No astrology insights available.";
+    let numerology = "No numerology insights available.";
+    let palmistry = "No palmistry insights available.";
 
-{
-  "answer": "Short summary answering the user's question based on combined insights.",
-  "astrology": "Short paragraph, Western astrology interpretation relevant to the question.",
-  "numerology": "Intro paragraph relevant to the question, followed by 5 sections explaining each number meaning.",
-  "palmistry": "Short paragraph relevant to question, covering life path, heart, fate, relationships, children, travel.",
-  "astroDetails": {
-    "Planetary Positions": "...",
-    "Ascendant (Rising) Zodiac Sign": "...",
-    "Astrological Houses": "...",
-    "Family Astrology": "...",
-    "Love Governing House in Astrology": "...",
-    "Health & Wellbeing Predictions": "...",
-    "Astrological influences on Work, Career and Business": "..."
-  },
-  "numDetails": {
-    "Life Path Number": "...",
-    "Expression Number": "...",
-    "Personality Number": "...",
-    "Soul Urge Number": "...",
-    "Maturity Number": "..."
-  },
-  "palmDetails": {
-    "Life Line": "...",
-    "Head Line": "...",
-    "Heart Line": "...",
-    "Fate Line": "...",
-    "Fingers": "...",
-    "Mounts": "...",
-    "Marriage/Relationships": "...",
-    "Children": "...",
-    "Travel Lines": "..."
-  }
-}
-
-Use these data for accuracy:
-Name: ${userData.fullName}
-DOB: ${userData.birthdate}
-Time: ${userData.birthTime}
-Place: ${userData.birthPlace}
-Question: ${userData.question}
-Numerology (Pythagorean): ${JSON.stringify(numValues)}
-System: Western Astrology
-`;
-
-    let json = {};
     try {
+      const prompt = `
+You are a professional spiritual advisor skilled in astrology, numerology, and palmistry.
+Use the following user details to provide a detailed answer to their question.
+
+User:
+- Name: ${userData.fullName}
+- Date of Birth: ${userData.birthdate}
+- Time of Birth: ${userData.birthTime}
+- Birth Place: ${userData.birthPlace}
+- Question: ${userData.question}
+
+Respond in this JSON format:
+{
+  "answer": "Direct short answer (50–100 words)",
+  "astrology": "Astrology summary paragraph relevant to their question",
+  "numerology": "Numerology summary paragraph relevant to their question",
+  "palmistry": "Palmistry summary paragraph relevant to their question"
+}`;
+
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
-        messages: [{ role: "system", content: "You are an expert Western astrologer, Pythagorean numerologist, and palm reader." },
-                   { role: "user", content: prompt }],
+        messages: [
+          {
+            role: "system",
+            content: "You are an expert astrologer, numerologist, and palm reader providing precise and concise insights.",
+          },
+          { role: "user", content: prompt },
+        ],
       });
-      const txt = completion.choices[0]?.message?.content || "{}";
-      json = JSON.parse(txt);
+
+      const jsonText = completion.choices[0]?.message?.content || "{}";
+      const parsed = JSON.parse(jsonText);
+
+      answer = parsed.answer || answer;
+      astrology = parsed.astrology || astrology;
+      numerology = parsed.numerology || numerology;
+      palmistry = parsed.palmistry || palmistry;
     } catch (err) {
       console.error("❌ OpenAI generation error:", err);
     }
 
-    // === Prepare PDF ===
+    // === PDF Generation ===
     const pdfBuffer = await generatePdfBuffer({
       fullName: userData.fullName,
       birthdate: userData.birthdate,
       birthTime: userData.birthTime,
       birthPlace: userData.birthPlace,
       question: userData.question,
-      answer: json.answer,
-      astrology: json.astrology,
-      numerology: json.numerology,
-      palmistry: json.palmistry,
-      astroDetails: json.astroDetails,
-      numDetails: { ...json.numDetails, _values: numValues },
-      palmDetails: json.palmDetails,
+      answer,
+      astrology,
+      numerology,
+      palmistry,
     });
+
+    // === Email Body ===
+    const htmlBody = `
+      <div style="font-family: Arial, sans-serif; color: #333; max-width: 700px; margin: auto; line-height: 1.6;">
+        <h2 style="text-align:center; color:#6c63ff;">🔮 Your Personalized Spiritual Report</h2>
+
+        <div style="background:#f7f7f7; padding:1rem; border-radius:10px; margin-bottom:1.5rem;">
+          <p><strong>📧 Email:</strong> ${userData.email}</p>
+          <p><strong>🧑 Name:</strong> ${userData.fullName}</p>
+          <p><strong>📅 Birth Date:</strong> ${formatDate(userData.birthdate)}</p>
+          <p><strong>⏰ Birth Time:</strong> ${userData.birthTime}</p>
+          <p><strong>🌍 Birth Place:</strong> ${userData.birthPlace}</p>
+          <p><strong>💭 Question:</strong> ${userData.question}</p>
+        </div>
+
+        <h3 style="color:#4B0082;">Answer</h3>
+        <p>${answer}</p>
+
+        <h3 style="color:#4B0082;">Astrology</h3>
+        <p>${astrology}</p>
+
+        <h3 style="color:#4B0082;">Numerology</h3>
+        <p>${numerology}</p>
+
+        <h3 style="color:#4B0082;">Palmistry</h3>
+        <p>${palmistry}</p>
+
+        <p style="margin-top:20px; font-size:0.9rem; color:#555;">
+          ✅ Your full detailed report is attached as a PDF.
+        </p>
+        <p style="text-align:center; margin-top:1.2rem; color:#777;">
+          — Hazcam Spiritual Systems ✨
+        </p>
+      </div>
+    `;
 
     // === Send Email ===
     await sendEmailWithAttachment({
       to: userData.email,
-      subject: "Your Full Spiritual Report (Western Astrology + Pythagorean Numerology)",
-      html: `<p>Hello ${userData.fullName},</p>
-             <p>Your personalized report is attached.</p>`,
+      subject: "🔮 Your Full Spiritual Report",
+      html: htmlBody,
       buffer: pdfBuffer,
       filename: "Spiritual_Report.pdf",
     });
 
+    console.log(`✅ Report emailed to ${userData.email}`);
+
     return res.status(200).json({
       success: true,
       message: "Report generated successfully.",
-      answer: json.answer,
-      astrologySummary: json.astrology,
-      numerologySummary: json.numerology,
-      palmSummary: json.palmistry,
+      answer,
+      astrologySummary: astrology,
+      numerologySummary: numerology,
+      palmSummary: palmistry,
     });
   });
 }
