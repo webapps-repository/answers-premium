@@ -1,169 +1,116 @@
 // /api/utils/generatePdf.js
 import getStream from "get-stream";
-
-// Dynamic import (Vercel-safe)
 let PDFDocument;
 try {
-  PDFDocument = (await import("pdfkit")).default; // pdfkit ^0.17.x
+  PDFDocument = (await import("pdfkit")).default;
 } catch (err) {
-  console.error("Failed to load PDFKit:", err);
+  console.error("❌ Failed to load PDFKit:", err);
   throw err;
 }
 
-// ~1.5 line spacing effect
-const LINE_GAP = 6;
-
-function maybePageBreak(doc, needed = 48) {
+function drawSectionHeading(doc, title) {
   const bottom = doc.page.height - doc.page.margins.bottom;
-  if (doc.y + needed > bottom) doc.addPage();
+  if (doc.y + 40 > bottom) doc.addPage();
+  doc.moveDown(0.3)
+     .fontSize(16)
+     .fillColor("#4B0082")
+     .text(title, { underline: true })
+     .moveDown(0.6);
 }
 
-function heading(doc, text) {
-  maybePageBreak(doc, 48);
-  doc
-    .moveDown(0.2)
-    .fontSize(18)
-    .fillColor("#4B0082")
-    .text(text, { underline: true })
-    .moveDown(0.4);
+function drawParagraph(doc, text, size = 12) {
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  if (doc.y + 60 > bottom) doc.addPage();
+  doc.fontSize(size)
+     .fillColor("#333")
+     .text(text || "—", { align: "justify", lineGap: 6 })
+     .moveDown(1.0);
 }
 
-function subheading(doc, text) {
-  maybePageBreak(doc, 32);
-  doc
-    .fontSize(13)
-    .fillColor("#4B0082")
-    .text(text)
-    .moveDown(0.1);
-}
-
-function paragraph(doc, text = "") {
-  maybePageBreak(doc, 64);
-  doc
-    .fontSize(12)
-    .fillColor("#222")
-    .text(text || "—", { lineGap: LINE_GAP })
-    .moveDown(0.2);
-}
-
-function detailsBlock(doc, kvPairs = []) {
-  kvPairs.forEach(([label, value]) => {
-    maybePageBreak(doc, 28);
-    doc.fontSize(12).fillColor("#222")
-      .text(`${label}: ${value || "—"}`, { lineGap: LINE_GAP });
+function drawTwoColTable(doc, rows, opts = {}) {
+  const { left = 50, col1Width = 200, col2Width = 340, rowHeight = 26 } = opts;
+  const bottom = doc.page.height - doc.page.margins.bottom;
+  rows.forEach((row, i) => {
+    if (doc.y + rowHeight > bottom - 20) doc.addPage();
+    if (i % 2 === 0) doc.save().rect(left, doc.y, col1Width + col2Width, rowHeight).fill("#F8F8FF").restore();
+    doc.fontSize(12)
+       .fillColor("#111")
+       .text(row[0] || "", left + 6, doc.y + 6, { width: col1Width - 10 })
+       .text(row[1] || "", left + col1Width + 10, doc.y + 6, { width: col2Width - 16, lineGap: 6 });
+    doc.y += rowHeight;
   });
-  doc.moveDown(0.4);
+  doc.moveDown(1.0);
 }
-
-const nz = (v, d="") => (v == null ? d : String(v));
-const numTitle = (label, block) => {
-  if (block && typeof block === "object") {
-    const n = nz(block.number);
-    return n ? `${label}: ${n}` : label;
-  }
-  return label;
-};
-const numMeaning = (block) => {
-  if (block && typeof block === "object") return nz(block.meaning);
-  return nz(block);
-};
 
 export async function generatePdfBuffer({
-  fullName,
-  birthdate,
-  birthTime,
-  birthPlace,
-  question,
-
-  // narrative content from OpenAI (structured)
-  answer,
-  astrology = {},
-  numerology = {},
-  palmistry = {},
+  fullName, birthdate, birthTime, birthPlace, question,
+  answer, astrology, numerology, palmistry,
+  astroDetails = {}, numDetails = {}, palmDetails = {}
 }) {
   const doc = new PDFDocument({ margin: 50 });
   const chunks = [];
   doc.on("data", (c) => chunks.push(c));
-  doc.on("end", () => console.log("PDF generation complete"));
+  doc.on("end", () => console.log("✅ PDF generated"));
 
-  // Title (no icons, centered)
-  doc
-    .fontSize(22)
-    .fillColor("#4B0082")
-    .text("Personal Spiritual Report", { align: "center" })
-    .moveDown(0.8);
+  doc.fontSize(22).fillColor("#4B0082")
+     .text("Personal Spiritual Report (Western Astrology / Pythagorean Numerology)", { align: "center" })
+     .moveDown(1.0);
 
-  // Details (full width)
-  detailsBlock(doc, [
-    ["Name", fullName],
-    ["Date of Birth", birthdate],
-    ["Time of Birth", birthTime || "Unknown"],
-    ["Birth Place", birthPlace],
-    ["Question", question || "—"],
+  doc.fontSize(12).fillColor("#111");
+  doc.text(`Name: ${fullName || "—"}`);
+  doc.text(`Date of Birth: ${birthdate || "—"}`);
+  doc.text(`Time of Birth: ${birthTime || "Unknown"}`);
+  doc.text(`Place of Birth: ${birthPlace || "—"}`);
+  doc.text(`Question: ${question || "—"}`).moveDown(1.0);
+
+  drawSectionHeading(doc, "Answer to Your Question");
+  drawParagraph(doc, answer);
+
+  drawSectionHeading(doc, "Astrology (Western System)");
+  drawParagraph(doc, astrology);
+  drawTwoColTable(doc, [
+    ["Planetary Positions", astroDetails["Planetary Positions"] || "—"],
+    ["Ascendant (Rising) Zodiac Sign", astroDetails["Ascendant (Rising) Zodiac Sign"] || "—"],
+    ["Astrological Houses", astroDetails["Astrological Houses"] || "—"],
+    ["Family Astrology", astroDetails["Family Astrology"] || "—"],
+    ["Love Governing House in Astrology", astroDetails["Love Governing House in Astrology"] || "—"],
+    ["Health & Wellbeing Predictions", astroDetails["Health & Wellbeing Predictions"] || "—"],
+    ["Astrological influences on Work, Career and Business",
+      astroDetails["Astrological influences on Work, Career and Business"] || "—"],
   ]);
 
-  // Answer
-  heading(doc, "Answer to Your Question");
-  paragraph(doc, answer);
+  drawSectionHeading(doc, "Numerology (Pythagorean System)");
+  drawParagraph(doc, numerology);
 
-  // Astrology section (summary + full-width sub-sections)
-  heading(doc, "Astrology");
-  paragraph(doc, nz(astrology.summary));
-  subheading(doc, "Planetary Positions"); paragraph(doc, nz(astrology.planetaryPositions));
-  subheading(doc, "Ascendant (Rising)");  paragraph(doc, nz(astrology.ascendant));
-  subheading(doc, "Houses");               paragraph(doc, nz(astrology.houses));
-  subheading(doc, "Family");               paragraph(doc, nz(astrology.family));
-  subheading(doc, "Love");                 paragraph(doc, nz(astrology.loveHouse));
-  subheading(doc, "Health & Wellbeing");   paragraph(doc, nz(astrology.health));
-  subheading(doc, "Work, Career & Business"); paragraph(doc, nz(astrology.career));
+  const vals = numDetails._values || {};
+  [
+    ["Life Path Number", "Life Path Number", vals.lifePath],
+    ["Expression Number", "Expression Number", vals.expression],
+    ["Personality Number", "Personality Number", vals.personality],
+    ["Soul Urge Number", "Soul Urge Number", vals.soulUrge],
+    ["Maturity Number", "Maturity Number", vals.maturity],
+  ].forEach(([label, key, num]) => {
+    doc.fontSize(14).fillColor("#4B0082").text(`${label} (${num ?? "?"})`, { underline: true }).moveDown(0.3);
+    doc.fontSize(12).fillColor("#333").text(numDetails[key] || "—", { align: "justify", lineGap: 6 });
+    doc.moveDown(1.0);
+  });
 
-  // Numerology section
-  heading(doc, "Numerology");
-  paragraph(doc, nz(numerology.summary));
+  drawSectionHeading(doc, "Palmistry");
+  drawParagraph(doc, palmistry);
+  drawTwoColTable(doc, [
+    ["Life Line", palmDetails["Life Line"] || "—"],
+    ["Head Line", palmDetails["Head Line"] || "—"],
+    ["Heart Line", palmDetails["Heart Line"] || "—"],
+    ["Fate Line", palmDetails["Fate Line"] || "—"],
+    ["Fingers", palmDetails["Fingers"] || "—"],
+    ["Mounts", palmDetails["Mounts"] || "—"],
+    ["Marriage/Relationships", palmDetails["Marriage/Relationships"] || "—"],
+    ["Children", palmDetails["Children"] || "—"],
+    ["Travel Lines", palmDetails["Travel Lines"] || "—"],
+  ]);
 
-  subheading(doc, numTitle("Life Path", numerology.lifePath));
-  paragraph(doc, numMeaning(numerology.lifePath));
-
-  subheading(doc, numTitle("Expression", numerology.expression));
-  paragraph(doc, numMeaning(numerology.expression));
-
-  subheading(doc, numTitle("Personality", numerology.personality));
-  paragraph(doc, numMeaning(numerology.personality));
-
-  subheading(doc, numTitle("Soul Urge", numerology.soulUrge));
-  paragraph(doc, numMeaning(numerology.soulUrge));
-
-  subheading(doc, numTitle("Maturity", numerology.maturity));
-  paragraph(doc, numMeaning(numerology.maturity));
-
-  // Palmistry section (full set including your added detail)
-  heading(doc, "Palmistry");
-  paragraph(doc, nz(palmistry.summary));
-
-  subheading(doc, "Life Line");        paragraph(doc, nz(palmistry.lifeLine));
-  subheading(doc, "Head Line");        paragraph(doc, nz(palmistry.headLine));
-  subheading(doc, "Heart Line");       paragraph(doc, nz(palmistry.heartLine));
-  subheading(doc, "Fate Line");        paragraph(doc, nz(palmistry.fateLine));
-  subheading(doc, "Thumb");            paragraph(doc, nz(palmistry.thumb));
-  subheading(doc, "Index Finger");     paragraph(doc, nz(palmistry.indexFinger));
-  subheading(doc, "Middle Finger");    paragraph(doc, nz(palmistry.middleFinger));
-  subheading(doc, "Ring Finger");      paragraph(doc, nz(palmistry.ringFinger));
-  subheading(doc, "Pinky Finger");     paragraph(doc, nz(palmistry.pinkyFinger));
-  subheading(doc, "Mounts (overall)"); paragraph(doc, nz(palmistry.mounts));
-  subheading(doc, "Prominent Mounts"); paragraph(doc, nz(palmistry.prominentMounts));
-  subheading(doc, "Marriage / Relationship"); paragraph(doc, nz(palmistry.marriageTimeline));
-  subheading(doc, "Children");         paragraph(doc, nz(palmistry.childrenCount));
-  subheading(doc, "Travel Lines");     paragraph(doc, nz(palmistry.travelDetails));
-  subheading(doc, "Stress Lines");     paragraph(doc, nz(palmistry.stressLines));
-
-  // Footer
-  doc
-    .moveDown(0.6)
-    .fontSize(10)
-    .fillColor("#666")
-    .text("This report is for informational and entertainment purposes only.", {
-      align: "center",
-    });
+  doc.moveDown(1.0).fontSize(10).fillColor("#777")
+     .text("Generated by Hazcam Spiritual Systems — Western astrology and Pythagorean numerology.", { align: "center" });
 
   doc.end();
   return await getStream.buffer(doc);
