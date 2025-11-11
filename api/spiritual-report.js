@@ -5,6 +5,11 @@ import OpenAI from "openai";
 import { generatePdfBuffer } from "./utils/generatePdf.js";
 import { sendEmailWithAttachment } from "./utils/sendEmail.js";
 
+// debug classifier OpenAI call
+console.time("Classifier");
+console.timeEnd("Classifier");
+console.log("🧠 Classifier result:", classification);
+
 // ---------- OpenAI client (optional; code gracefully degrades if key missing)
 const openai =
   process.env.OPENAI_API_KEY ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY }) : null;
