@@ -9,6 +9,23 @@ import { Resend } from "resend";
 
 export const config = { api: { bodyParser: false } };
 
+export default async function handler(req, res) {
+  // --- CORS ---
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();  // stop here for preflight
+  }
+
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
+  }
+
+  // --- Now safe to parse Formidable after preflight done ---
+  const form = formidable({ multiples: false, keepExtensions: true });
+}
+
 // ---------- Helpers ----------
 function safeStr(x, fallback = "") {
   if (x == null) return fallback;
