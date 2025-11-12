@@ -24,6 +24,15 @@ export default async function handler(req,res){
   const resend=resendKey?new Resend(resendKey):null;
   const openai=openaiKey?new OpenAI({apiKey:openaiKey}):null;
 
+  } catch (err) {
+    console.error("❌ Selftest crashed:", err);
+    return res.status(500).json({
+      success: false,
+      error: "Internal Server Error",
+      message: err.message,
+    });
+  }
+
   // --- OpenAI Chat ---
   try{
     const r=await openai.chat.completions.create({
