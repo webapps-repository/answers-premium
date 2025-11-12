@@ -1,38 +1,26 @@
-// /api/utils/sendEmail.js
+// Melodies Web – Resend Email Utility
 import { Resend } from "resend";
-
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-export async function sendEmailWithAttachment({ to, subject, html, buffer, filename }) {
+export async function sendEmailWithResend({
+  to,
+  subject,
+  html,
+  buffer,
+  filename = "Your_Answer.pdf",
+}) {
   try {
-    console.log("📨 Sending email via Resend...");
-    console.log("To:", to);
-    console.log("Subject:", subject);
-    console.log("Attachment:", filename);
-
-    const emailData = {
-      from: "Hazcam Spiritual <sales@hazcam.io>",
+    await resend.emails.send({
+      from: "Melodies Web <noreply@melodiesweb.io>",
       to,
       subject,
-      html, // ✅ HTML body is directly passed as a string
+      html,
       attachments: buffer
-        ? [
-            {
-              filename: filename || "Spiritual_Report.pdf",
-              content: buffer.toString("base64"),
-              encoding: "base64",
-              type: "application/pdf",
-            },
-          ]
+        ? [{ filename, content: buffer.toString("base64") }]
         : [],
-    };
-
-    const response = await resend.emails.send(emailData);
-
-    console.log("✅ Email sent via Resend:", response);
-    return response;
-  } catch (error) {
-    console.error("❌ Failed to send email via Resend:", error);
-    throw error;
+    });
+    console.log("📨 Resend email sent to", to);
+  } catch (err) {
+    console.error("❌ Resend email error:", err);
   }
 }
