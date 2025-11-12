@@ -1,46 +1,44 @@
-// /api/classify-question.js
+// classify-question.js — Classify user question as "personal" or "technical" using OpenAI
 import OpenAI from "openai";
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-export const config = { api: { bodyParser: true } };
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  : null;
 
-export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ success: false, error: "Method not allowed" });
+export async function classifyQuestion(question = "") {
+  const fallback = () => {
+    const q = question.toLowerCase();
+    const personalHints = [
+      "my", "should i", "will i", "born", "relationship", "marriage",
+      "career", "health", "love", "life", "astrology", "numerology", "palm"
+    ];
+    return personalHints.some((k) => q.includes(k)) ? "personal" : "technical";
+  };
+
+  if (!openai) return fallback();
 
   try {
-    const { question } = req.body;
-    if (!question)
-      return res.status(400).json({ success: false, error: "Missing question" });
+    const prompt = `
+Classify this question as "personal" or "technical".
+- personal = about an individual's life, love, health, or destiny.
+- technical = logical, scientific, business, finance, or data.
 
-    const completion = await openai.chat.completions.create({
+Question: """${question}"""
+Return JSON like {"type":"personal"} or {"type":"technical"} only.
+`;
+    const r = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
-        {
-          role: "system",
-          content: `Classify questions as "personal" (love, fate, career, health, spirituality, astrology, numerology, palmistry, life path) 
-          or "technical" (finance, math, science, environment, engineering, programming, technology). 
-          Return ONLY JSON like {"type":"personal"} or {"type":"technical"}.`,
-        },
-        { role: "user", content: question },
+        { role: "system", content: "Return valid JSON only." },
+        { role: "user", content: prompt },
       ],
+      temperature: 0,
     });
-
-    let parsed;
-    try {
-      parsed = JSON.parse(completion.choices[0].message.content);
-    } catch {
-      const isPersonal = /(i|my|me|born|love|career|future|health|marriage|life)/i.test(question);
-      parsed = { type: isPersonal ? "personal" : "technical" };
-    }
-
-    return res.status(200).json({ success: true, type: parsed.type });
+    const raw = r.choices?.[0]?.message?.content?.trim() || "{}";
+    const parsed = JSON.parse(raw);
+    return parsed.type || fallback();
   } catch (err) {
-    console.error("❌ Classifier error:", err);
-    return res.status(500).json({ success: false, error: err.message });
+    console.error("Classify fallback:", err);
+    return fallback();
   }
 }
