@@ -1,48 +1,73 @@
-// /api/utils/generatePdf.js
-
 import getStream from "get-stream";
 import PDFKit from "pdfkit";
 
-const line = (doc,h=6)=>doc.moveDown(h/12);
-const title = (doc,t)=>doc.fontSize(14).fillColor("#111").text(t,{underline:true}).moveDown(0.5);
-const header = (doc,brand)=>{doc.fontSize(10).fillColor("#666").text(brand,{align:"center"});doc.moveDown(0.2);};
+function line(doc, h = 6) {
+  doc.moveDown(h / 12);
+}
+function sectionTitle(doc, text) {
+  doc.fontSize(14).fillColor("#111").text(text, { underline: true });
+  line(doc, 0.5);
+}
+function headerBrand(doc, brandText) {
+  doc.fontSize(10).fillColor("#666").text(brandText, { align: "center" });
+  line(doc, 0.2);
+}
 
 export async function generatePdfBuffer({
-  headerBrand="Melodies Web", title:"Your Answer", mode="personal",
-  question, answer, fullName, birthdate, birthTime, birthPlace,
-  astrologySummary, numerologySummary, palmistrySummary, numerologyPack={}
-}){
-  const doc=new PDFKit({margin:56,info:{Title:title,Author:"Melodies Web"}});
-  const chunks=[];doc.on("data",c=>chunks.push(c));doc.on("end",()=>{});
+  headerBrand: brand = "Melodies Web",
+  title = "Your Answer",
+  mode = "personal",
+  question,
+  answer,
+  fullName,
+  birthdate,
+  birthTime,
+  birthPlace,
+  astrologySummary,
+  numerologySummary,
+  palmistrySummary,
+  numerologyPack = {},
+}) {
+  const doc = new PDFKit({ margin: 56, info: { Title: title } });
+  const chunks = [];
+  doc.on("data", (c) => chunks.push(c));
+  doc.on("end", () => {});
 
-  header(doc,headerBrand);
-  doc.fontSize(20).fillColor("#000").text(title,{align:"center"});
-  line(doc,10);
+  headerBrand(doc, brand);
+  doc.fontSize(20).fillColor("#000").text(title, { align: "center" });
+  line(doc, 10);
 
-  if(question){title(doc,"Question");doc.fontSize(12).fillColor("#222").text(question);line(doc,10);}
-  title(doc,"Answer");doc.fontSize(12).fillColor("#222").text(answer||"—");line(doc,12);
+  sectionTitle(doc, "Question");
+  doc.fontSize(12).text(question || "—");
+  line(doc, 8);
 
-  if(mode==="technical"){
-    const kp=numerologyPack.technicalKeyPoints||[];
-    if(kp.length){title(doc,"Key Points");kp.forEach(p=>doc.text("• "+p));line(doc,6);}
-    if(numerologyPack.technicalNotes){title(doc,"Notes");doc.text(numerologyPack.technicalNotes);line(doc,6);}
-  }else{
-    title(doc,"Your Details");
-    doc.fontSize(12).text(`Name: ${fullName||"—"}`)
-      .text(`Date of Birth: ${birthdate||"—"}`)
-      .text(`Time of Birth: ${birthTime||"—"}`)
-      .text(`Place: ${birthPlace||"—"}`);line(doc,8);
-    title(doc,"Astrology");doc.text(astrologySummary||"—");line(doc,8);
-    title(doc,"Numerology");doc.text(numerologySummary||"—");line(doc,6);
-    const np=numerologyPack||{};
-    ["lifePath","expression","personality","soulUrge","maturity"].forEach(k=>{
-      if(np[k]!=null)doc.text(`${k}: ${np[k]}`);
+  sectionTitle(doc, "Answer");
+  doc.fontSize(12).text(answer || "—");
+  line(doc, 10);
+
+  if (mode === "personal") {
+    sectionTitle(doc, "Your Details");
+    doc.text(`Name: ${fullName || "—"}`);
+    doc.text(`DOB: ${birthdate || "—"}`);
+    doc.text(`Time: ${birthTime || "Unknown"}`);
+    doc.text(`Place: ${birthPlace || "—"}`);
+    line(doc, 8);
+
+    sectionTitle(doc, "Astrology");
+    doc.text(astrologySummary || "—");
+    line(doc, 8);
+
+    sectionTitle(doc, "Numerology");
+    doc.text(numerologySummary || "—");
+    Object.entries(numerologyPack).forEach(([k, v]) => {
+      doc.text(`${k}: ${v ?? "—"}`);
     });
-    line(doc,6);
-    title(doc,"Palmistry");doc.text(palmistrySummary||"—");line(doc,6);
+    line(doc, 8);
+
+    sectionTitle(doc, "Palmistry");
+    doc.text(palmistrySummary || "—");
   }
-  doc.fontSize(10).fillColor("#777")
-    .text("This report is for informational purposes only.",{align:"center"});
+
   doc.end();
   return await getStream.buffer(doc);
 }
