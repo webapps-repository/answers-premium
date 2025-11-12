@@ -1,5 +1,8 @@
 // /api/selftest.js
 // Performs environment + integration tests: OpenAI, Resend, PDF, Numerology, JSON validity.
+// /api/selftest.js
+// /api/selftest.js
+// /api/selftest.js
 
 import OpenAI from "openai";
 import { Resend } from "resend";
