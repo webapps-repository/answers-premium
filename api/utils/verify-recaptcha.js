@@ -1,18 +1,18 @@
-export async function verifyRecaptcha(token = "") {
-  if (!token) return { success: false, error: "missing_token" };
-
+export async function verifyRecaptcha(token) {
   try {
+    const secret = process.env.RECAPTCHA_SECRET_KEY || "";
+    if (!secret) return { ok: false, reason: "missing-secret" };
+    if (!token)  return { ok: false, reason: "missing-token" };
+
     const res = await fetch("https://www.google.com/recaptcha/api/siteverify", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        secret: process.env.RECAPTCHA_SECRET_KEY || "",
-        response: token,
-      }),
+      body: new URLSearchParams({ secret, response: token }),
     });
-    return await res.json();
-  } catch (err) {
-    console.error("Recaptcha error:", err);
-    return { success: false, error: err.message };
+    const data = await res.json();
+    return { ok: !!data.success, data };
+  } catch (e) {
+    console.error("recaptcha error:", e);
+    return { ok: false, reason: "exception" };
   }
 }
