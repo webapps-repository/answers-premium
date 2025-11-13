@@ -35,15 +35,7 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")   return res.status(405).json({ error: "Method not allowed" });
 
-  const form = formidable({multiples: false, keepExtensions: true,
-
-  // FIX: allow optional image upload fields
-  allowEmptyFiles: true,
-  minFileSize: 0,  
-
-  // also increases compatibility with Shopify forms
-  maxFileSize: 10 * 1024 * 1024, // 10MB
-});
+  const form = formidable({multiples: false, keepExtensions: true, allowEmptyFiles: true, minFileSize: 0,  maxFileSize: 10 * 1024 * 1024, });
 
   try {
     form.parse(req, async (err, fields, files) => {
