@@ -1,63 +1,60 @@
-// generateInsights.js — Generate summarized text for reports using OpenAI
 import OpenAI from "openai";
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
 
-export async function generateInsights({ question, name, dobIso, numerics }) {
-  if (!openai) {
+export async function personalSummaries(input) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
+    // Minimal fallback text if OpenAI is off
     return {
-      answer: "Your chart suggests positive changes ahead.",
-      astro: "Astrology shows growth and stability entering your cycle.",
-      numerology: "Numerology indicates transformation and opportunity.",
-      palm: "Palm lines strengthen over the coming year.",
+      answer: "Here’s a short, supportive answer based on your details.",
+      astrologySummary: "Astrology suggests a period of reflection and steady change.",
+      numerologySummary: "Your numerology points to practical progress and clarity.",
+      palmistrySummary: "Palm features indicate resilience and consistent momentum.",
     };
   }
 
-  try {
-    const system = `You are an expert astrologer, numerologist, and palm reader.
-Respond in short, warm, clear English paragraphs only.`;
+  const openai = new OpenAI({ apiKey: key });
+  const prompt = `Create short paragraphs tailored to the user's question.
+Return JSON with keys:
+{ "answer": "...<=120 words", "astrologySummary": "...", "numerologySummary": "...", "palmistrySummary": "..." }
 
-    const user = `
-Create concise interpretations for this reading.
-Name: ${name || "(unknown)"}
-DOB: ${dobIso || "(unknown)"}
-Numerology: ${JSON.stringify(numerics || {})}
-Question: ${question}
+User:
+${JSON.stringify(input, null, 2)}
+Return JSON only.`;
 
-Return JSON:
-{
-  "answer": "Short summary response (under 80 words)",
-  "astro": "Astrology paragraph",
-  "numerology": "Numerology paragraph",
-  "palm": "Palmistry paragraph"
+  const r = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.5,
+    messages: [
+      { role: "system", content: "Return valid JSON only." },
+      { role: "user", content: prompt },
+    ],
+  });
+  const txt = r.choices?.[0]?.message?.content?.trim() || "{}";
+  return JSON.parse(txt);
 }
-`;
 
-    const r = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user },
-      ],
-      temperature: 0.6,
-    });
-
-    const txt = r.choices?.[0]?.message?.content?.trim() || "{}";
-    const data = JSON.parse(txt);
+export async function technicalSummary(question) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) {
     return {
-      answer: data.answer || "Your answer is being revealed soon.",
-      astro: data.astro || "",
-      numerology: data.numerology || "",
-      palm: data.palm || "",
-    };
-  } catch (err) {
-    console.error("Insight generation error:", err);
-    return {
-      answer: "Your chart suggests change ahead.",
-      astro: "Astrological influences indicate progress.",
-      numerology: "Numerology shows adaptability and learning.",
-      palm: "Palmistry lines indicate renewal.",
+      answer: "Here’s a concise answer.",
+      keyPoints: ["Key point A", "Key point B", "Key point C"],
+      notes: "OpenAI disabled; using fallback content.",
     };
   }
+  const openai = new OpenAI({ apiKey: key });
+  const prompt = `Return JSON:
+{ "answer": "2-3 sentences", "keyPoints": ["..."], "notes": "optional" }
+Question: """${question}"""`;
+
+  const r = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    temperature: 0.2,
+    messages: [
+      { role: "system", content: "Return valid JSON only." },
+      { role: "user", content: prompt },
+    ],
+  });
+  const txt = r.choices?.[0]?.message?.content?.trim() || "{}";
+  return JSON.parse(txt);
 }
