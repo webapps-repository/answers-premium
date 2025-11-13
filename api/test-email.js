@@ -1,21 +1,24 @@
-// test-email.js — Quick endpoint to test Resend mail delivery
-import { sendEmailWithResend } from "./utils/sendEmail.js";
+// /api/test-email.js
+import { sendEmailHTML } from "./utils/send-email.js";
+
+export const config = { api: { bodyParser:false } };
 
 export default async function handler(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  if (req.method === "OPTIONS") return res.status(200).end();
-
-  const to = process.env.TEST_EMAIL_TO || "dev@melodiesweb.io";
-
   try {
-    await sendEmailWithResend({
-      to,
-      subject: "Test Email from Melodies Web",
-      html: "<p>This is a test email via Resend API integration.</p>",
+    await sendEmailHTML({
+      to: process.env.ALERT_EMAIL,
+      subject:"Melodies Web Test Email",
+      html:`<p>This is a test email from Melodies Web at ${new Date().toISOString()}</p>`,
+      attachments:[{
+        filename:"test.txt",
+        buffer:Buffer.from("Email system is working.")
+      }]
     });
-    res.json({ success: true, to });
-  } catch (err) {
-    console.error("Test email error:", err);
-    res.status(500).json({ success: false, error: err.message });
+
+    return res.status(200).json({ ok:true, message:"Test email sent" });
+
+  } catch (e) {
+    console.error("Test-email error:", e);
+    return res.status(500).json({ ok:false, error:String(e) });
   }
 }
