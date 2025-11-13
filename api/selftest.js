@@ -1,33 +1,44 @@
-export const config = { api: { bodyParser: true } };
+// /api/selftest.js
+import { classifyQuestion } from "./utils/classify-question.js";
+import { personalSummaries, technicalSummary } from "./utils/generate-insights.js";
+import { generatePdfBuffer } from "./utils/generate-pdf.js";
+import { sendEmailHTML } from "./utils/send-email.js";
 
-export default async function handler(_req, res) {
-  const out = [];
-  const start = Date.now();
+export const config = { api: { bodyParser: false } };
 
-  const push = (name, ok, detail = "") => out.push({ name, ok, detail });
-
-  // OpenAI
+export default async function handler(req, res) {
   try {
-    push("OPENAI_API_KEY", !!process.env.OPENAI_API_KEY, !!process.env.OPENAI_API_KEY ? "Found" : "Missing");
-  } catch { push("OPENAI_API_KEY", false, "Error reading env"); }
+    // 1. Classifier test
+    const cls = await classifyQuestion("Should I move house?");
+    if (!cls.type) throw new Error("Classifier failed");
 
-  // Resend
-  push("RESEND_API_KEY", !!process.env.RESEND_API_KEY, !!process.env.RESEND_API_KEY ? "Found" : "Missing");
-  push("FROM_EMAIL", !!process.env.FROM_EMAIL, process.env.FROM_EMAIL || "Missing");
+    // 2. Technical summary test
+    const t = await technicalSummary("What is quantum tunneling?");
+    if (!t.answer) throw new Error("Technical summary failed");
 
-  // reCAPTCHA
-  push("RECAPTCHA_SECRET_KEY", !!process.env.RECAPTCHA_SECRET_KEY, !!process.env.RECAPTCHA_SECRET_KEY ? "Found" : "Missing");
+    // 3. PDF test
+    const pdf = await generatePdfBuffer({
+      headerBrand:"Melodies Web",
+      titleText:"Self-Test Report",
+      mode:"technical",
+      question:"System self-check",
+      answer:"All systems OK",
+      numerologyPack:{ technicalKeyPoints:["PDF OK"], technicalNotes:"PDF rendered" }
+    });
+    if (!pdf) throw new Error("PDF generation failed");
 
-  // PDF
-  try {
-    const { generatePdfBuffer } = await import("./utils/generate-pdf.js");
-    const pdf = await generatePdfBuffer({ titleText: "SelfTest PDF", question: "ping", answer: "pong", mode: "technical", numerologyPack: { technicalKeyPoints: ["ok"], technicalNotes: "ok" } });
-    push("PDF generation", pdf?.length > 1000, `bytes=${pdf?.length || 0}`);
-  } catch (e) { push("PDF generation", false, String(e?.message || e)); }
+    // 4. Email test
+    await sendEmailHTML({
+      to: process.env.ALERT_EMAIL,
+      subject:"Self-Test: OK",
+      html:`<p>Self-test passed at ${new Date().toISOString()}</p>`,
+      attachments:[{filename:"selftest.pdf", buffer:pdf}]
+    });
 
-  res.status(200).json({
-    success: out.every(x => x.ok),
-    duration: ((Date.now() - start) / 1000).toFixed(2) + "s",
-    results: out,
-  });
+    return res.status(200).json({ ok:true, details:"All checks passed" });
+
+  } catch (e) {
+    console.error("Self-test failed:", e);
+    return res.status(500).json({ ok:false, error:e.message });
+  }
 }
