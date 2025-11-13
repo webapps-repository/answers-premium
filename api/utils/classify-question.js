@@ -1,43 +1,46 @@
+// Classifier with OpenAI (optional) + safe fallback.
+// Returns: { type: "personal"|"technical", confidence: number, source: "openai"|"fallback" }
+
 import OpenAI from "openai";
 
-const openai = process.env.OPENAI_API_KEY
-  ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
-  : null;
+const personalHints = [
+  "my ", "for me", "should i", "will i", "when will i", "relationship",
+  "marriage", "love", "health", "career", "born", "birth", "zodiac",
+  "astrology", "numerology", "palm", "future"
+];
 
-export async function classifyQuestion(question = "") {
-  const fallback = () => {
-    const q = question.toLowerCase();
-    const personalHints = [
-      "my","should i","will i","born","relationship",
-      "marriage","career","health","love","life","astrology","numerology","palm"
-    ];
-    return personalHints.some((k) => q.includes(k)) ? "personal" : "technical";
-  };
+function fallbackClassify(q) {
+  const t = (q || "").toLowerCase();
+  const hit = personalHints.some(k => t.includes(k));
+  return { type: hit ? "personal" : "technical", confidence: 0.55, source: "fallback" };
+}
 
-  if (!openai) return fallback();
+export async function classifyQuestion(question) {
+  const key = process.env.OPENAI_API_KEY;
+  if (!key) return fallbackClassify(question);
 
   try {
-    const prompt = `
-Classify this question as "personal" or "technical".
-personal = about an individual's life, destiny, love, or health.
-technical = analytical, scientific, or factual.
-
-Question: """${question}"""
-Return JSON: {"type":"personal"} or {"type":"technical"}.`;
-
+    const openai = new OpenAI({ apiKey: key });
     const r = await openai.chat.completions.create({
       model: "gpt-4o-mini",
+      temperature: 0,
       messages: [
         { role: "system", content: "Return valid JSON only." },
-        { role: "user", content: prompt },
+        { role: "user", content:
+`Classify the question as JSON: {"type":"personal"|"technical","confidence":0..1}.
+"personal" = guidance about a specific individual (life/love/career/health/spiritual).
+"technical" = math, finance, code, science, environment, troubleshooting, etc.
+Question: """${question || ""}"""` }
       ],
-      temperature: 0,
     });
-    const raw = r.choices?.[0]?.message?.content?.trim() || "{}";
-    const parsed = JSON.parse(raw);
-    return parsed.type || fallback();
-  } catch (err) {
-    console.error("Classify fallback:", err);
-    return fallback();
+    const txt = r.choices?.[0]?.message?.content?.trim() || "{}";
+    const parsed = JSON.parse(txt);
+    if (parsed?.type === "personal" || parsed?.type === "technical") {
+      return { type: parsed.type, confidence: Number(parsed.confidence ?? 0.6), source: "openai" };
+    }
+    return fallbackClassify(question);
+  } catch (e) {
+    console.error("classifier openai error:", e);
+    return fallbackClassify(question);
   }
 }
