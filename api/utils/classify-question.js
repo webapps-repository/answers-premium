@@ -1,24 +1,29 @@
 // /api/utils/classify-question.js
-// Classifies a question as "personal" or "technical".
-// Uses OpenAI when available; otherwise uses a safe fallback.
+// Clean, stable classifier using OpenAI gpt-4o, with strict JSON output.
+// Falls back to keyword classifier if the API is unavailable or returns bad JSON.
 
 import OpenAI from "openai";
 
-// Create client only if key exists (prevents crash on cold start)
+// Create client only if API key exists (prevents cold-start errors)
 let openai = null;
 if (process.env.OPENAI_API_KEY) {
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-// --- Fallback classifier (simple keyword logic) ---
+/** ------------------------------------------------------------------
+ * Fallback keyword classifier (never fails, always returns valid JSON)
+ * ------------------------------------------------------------------*/
 function fallbackClassifier(question) {
   const q = (question || "").toLowerCase();
 
   const personalHints = [
-    "my", "me", "i am", "should i", "will i", "love", "relationship",
-    "marriage", "born", "birth", "date of birth", "health",
-    "career", "future", "astrology", "numerology", "palm",
-    "spiritual", "for me", "about me"
+    "my", "me", "i ", "i'm", "i am",
+    "should i", "will i", "for me", "to me",
+    "relationship", "love", "marriage",
+    "health", "career", "future", "life",
+    "born", "birth", "date of birth",
+    "astrology", "numerology", "palm",
+    "spiritual", "reading", "fortune",
   ];
 
   const isPersonal = personalHints.some(k => q.includes(k));
@@ -30,44 +35,52 @@ function fallbackClassifier(question) {
   };
 }
 
-// --- OpenAI classifier (preferred) ---
+/** ------------------------------------------------------------------
+ * OpenAI classifier using gpt-4o (strict JSON only)
+ * ------------------------------------------------------------------*/
 async function openaiClassifier(question) {
   if (!openai) return fallbackClassifier(question);
 
   try {
     const prompt = `
-Classify the user's question strictly as JSON:
+Classify the following question.
+
+Return ONLY a valid JSON object with this shape:
+
 {
   "type": "personal" | "technical",
-  "confidence": number (0..1)
+  "confidence": number
 }
 
-Rules:
-- "personal" = questions about the individual’s future, life, love, health, career, decisions, spiritual guidance.
-- "technical" = anything analytical: finance, math, science, business, troubleshooting, IT, economics, coding, etc.
+Definitions:
+- "personal" = questions about the user's life, emotions, future, relationships, health, marriage, destiny, spiritual matters, or decisions relating to themselves.
+- "technical" = questions about math, finance, business, coding, IT, science, engineering, economics, history, analysis, troubleshooting, or factual subjects.
 
-Return ONLY JSON.
+Do NOT include explanations. Do NOT include extra text.
+Just return the JSON.
 
 User question:
 "${question}"
 `;
 
     const result = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: "gpt-4o",
       temperature: 0.0,
       messages: [
-        { role: "system", content: "Return valid JSON only." },
+        { role: "system", content: "Return ONLY strict JSON. No extra text." },
         { role: "user", content: prompt }
       ]
     });
 
-    const text = result.choices?.[0]?.message?.content?.trim() || "{}";
-    const parsed = JSON.parse(text);
+    const raw = result.choices?.[0]?.message?.content?.trim() || "{}";
 
-    if (parsed && (parsed.type === "personal" || parsed.type === "technical")) {
+    // Ensure strict JSON parse
+    const data = JSON.parse(raw);
+
+    if (data && (data.type === "personal" || data.type === "technical")) {
       return {
-        type: parsed.type,
-        confidence: Number(parsed.confidence ?? 0.5),
+        type: data.type,
+        confidence: Number(data.confidence ?? 0.5),
         source: "openai"
       };
     }
@@ -75,12 +88,14 @@ User question:
     return fallbackClassifier(question);
 
   } catch (err) {
-    console.error("⚠️ OpenAI classification error:", err);
+    console.error("⚠️ classifyQuestion OpenAI error:", err);
     return fallbackClassifier(question);
   }
 }
 
-// --- PUBLIC EXPORT ---
+/** ------------------------------------------------------------------
+ * PUBLIC EXPORT
+ * ------------------------------------------------------------------*/
 export async function classifyQuestion(question) {
   if (!question || typeof question !== "string") {
     return {
@@ -89,5 +104,6 @@ export async function classifyQuestion(question) {
       source: "invalid"
     };
   }
+
   return await openaiClassifier(question);
 }
