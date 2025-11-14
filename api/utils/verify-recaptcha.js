@@ -1,55 +1,25 @@
 // /api/utils/verify-recaptcha.js
-// reCAPTCHA v2 Checkbox verification (server-side)
-// Works on Node 18–22 and Vercel Edge/Serverless
-
 export async function verifyRecaptcha(token) {
-  const secret = process.env.RECAPTCHA_SECRET_KEY;
-  if (!secret) {
-    return {
-      ok: false,
-      error: "Missing RECAPTCHA_SECRET_KEY env variable",
-    };
-  }
-
-  if (!token || typeof token !== "string") {
-    return {
-      ok: false,
-      error: "Missing or invalid token",
-    };
-  }
-
   try {
+    if (!token) return { ok: false, reason: "missing_token" };
+
+    const secret = process.env.RECAPTCHA_SECRET_KEY;
+    if (!secret) return { ok: false, reason: "missing_secret" };
+
+    const url = `https://www.google.com/recaptcha/api/siteverify`;
     const params = new URLSearchParams();
     params.append("secret", secret);
     params.append("response", token);
 
-    const verifyRes = await fetch(
-      "https://www.google.com/recaptcha/api/siteverify",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body: params.toString(),
-      }
-    );
+    const resp = await fetch(url, {
+      method: "POST",
+      body: params
+    });
 
-    const json = await verifyRes.json();
-
-    if (!json.success) {
-      return {
-        ok: false,
-        error: "reCAPTCHA rejected",
-        details: json,
-      };
-    }
-
-    return { ok: true };
+    const data = await resp.json();
+    return { ok: data.success === true, raw: data };
   } catch (err) {
-    return {
-      ok: false,
-      error: "reCAPTCHA request failed",
-      details: String(err),
-    };
+    console.error("verifyRecaptcha error:", err);
+    return { ok: false, error: err.message };
   }
 }
