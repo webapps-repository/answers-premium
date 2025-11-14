@@ -1,91 +1,86 @@
 // /api/utils/generate-insights.js
-// GPT-4o advanced insights generation for personal + technical questions
+// OpenAI summaries (personal + technical)
 
 import OpenAI from "openai";
 
 let openai = null;
-if (process.env.OPENAI_API_KEY) {
+if (process.env.OPENAI_API_KEY)
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
 
-// Safe JSON extractor
-async function aiJSON(prompt, fallback = {}) {
+const safeAI = async (messages, fallback={}) => {
   if (!openai) return fallback;
-
   try {
-    const r = await openai.chat.completions.create({
+    const res = await openai.chat.completions.create({
       model: "gpt-4o",
-      temperature: 0.3,
-      messages: [
-        { role: "system", content: "Return ONLY valid JSON." },
-        { role: "user", content: prompt }
-      ],
+      temperature: 0.6,
+      messages
     });
-
-    const txt = r.choices?.[0]?.message?.content?.trim() || "{}";
-    return JSON.parse(txt);
+    return JSON.parse(res.choices[0].message.content);
   } catch (e) {
-    console.error("AI JSON parse error:", e);
+    console.error("AI error", e);
     return fallback;
   }
-}
+};
 
-// ----- PERSONAL REPORT ENGINE -----
-export async function personalSummaries({
-  fullName,
-  birthISO,
-  birthTime,
-  birthPlace,
-  question,
-  numerologyPack,
-  analyzePalm = false,
-  palmImageBase64 = null
-}) {
+// PERSONAL SUMMARY
+export async function personalSummaries(data) {
+  const { fullName, birthISO, birthTime, birthPlace, question, numerologyPack } = data;
+
   const prompt = `
-Generate a PERSONAL spiritual insight report as JSON:
-
+Return ONLY valid JSON with keys:
 {
-  "answer": "1 paragraph directly answering the question",
-  "astrologySummary": "1 short paragraph",
-  "numerologySummary": "1 short paragraph that references all 5 numbers",
-  "palmistrySummary": "1 paragraph (or empty if no palm image)"
+  "answer": "...",
+  "astrologySummary": "...",
+  "numerologySummary": "...",
+  "palmistrySummary": "..."
 }
 
-QUESTION: ${question}
+Use:
+- Western astrology
+- Pythagorean numerology
+- Palmistry (general reading, lines, mounts, timing)
+- All content must directly answer the question.
 
-NAME: ${fullName}
-DOB (ISO): ${birthISO}
-TIME: ${birthTime}
-PLACE: ${birthPlace}
+Numerology numbers:
+${JSON.stringify(numerologyPack, null, 2)}
 
-NUMEROLOGY (Pythagorean):
-Life Path = ${numerologyPack.lifePath}
-Expression = ${numerologyPack.expression}
-Personality = ${numerologyPack.personality}
-Soul Urge = ${numerologyPack.soulUrge}
-Maturity = ${numerologyPack.maturity}
+User:
+Name: ${fullName}
+DOB: ${birthISO}
+Birth time: ${birthTime}
+Birth place: ${birthPlace}
+Question: ${question}
 
-PALM IMAGE PROVIDED: ${analyzePalm ? "YES" : "NO"}
-${palmImageBase64 ? "BASE64 IMAGE INCLUDED" : ""}
+Make the 3 summaries short and specific.
 `;
 
-  return await aiJSON(prompt, {});
+  return await safeAI(
+    [
+      { role: "system", content: "Return valid JSON only." },
+      { role: "user", content: prompt }
+    ],
+    {}
+  );
 }
 
-// ----- TECHNICAL REPORT ENGINE -----
+// TECHNICAL SUMMARY
 export async function technicalSummary(question) {
   const prompt = `
-Create a concise technical answer as JSON:
-
+Return ONLY valid JSON:
 {
-  "answer": "2–4 sentences that directly answer the question.",
-  "keyPoints": ["3–6 bullet points"],
-  "notes": "optional additional notes"
+  "answer": "2–3 sentence direct answer",
+  "keyPoints": ["p1","p2","p3"],
+  "notes": "optional"
 }
 
-QUESTION:
-${question}
+Question: ${question}
 `;
 
-  return await aiJSON(prompt, {});
+  return await safeAI(
+    [
+      { role:"system", content:"Return JSON only." },
+      { role:"user", content:prompt }
+    ],
+    {}
+  );
 }
