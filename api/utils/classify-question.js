@@ -1,21 +1,22 @@
 // /api/utils/classify-question.js
-// GPT-4o enhanced classification (personal vs technical)
 
 import OpenAI from "openai";
 
-let openai = null;
-if (process.env.OPENAI_API_KEY) {
-  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-}
+let openai=null;
+if (process.env.OPENAI_API_KEY)
+  openai=new OpenAI({apiKey:process.env.OPENAI_API_KEY});
 
-function fallback(question){
-  const q = (question||"").toLowerCase();
-  const personalHints = [
-    "my", "i", "me", "born", "love", "relationship", "marriage",
-    "career", "future", "astrology", "numerology", "palm"
+function fallback(q){
+  const s=(q||"").toLowerCase();
+  const hints=[
+    "my","me","should i","will i","love","relationship","born","date of birth",
+    "astrology","numerology","palm","future","career","health"
   ];
-  const isPersonal = personalHints.some(k => q.includes(k));
-  return { type: isPersonal?"personal":"technical", confidence:0.55, source:"fallback" };
+  return {
+    type: hints.some(k=>s.includes(k)) ? "personal":"technical",
+    confidence:0.55,
+    source:"fallback"
+  };
 }
 
 export async function classifyQuestion(question){
@@ -24,31 +25,33 @@ export async function classifyQuestion(question){
   try {
     const prompt = `
 Return ONLY JSON:
-
 {
   "type": "personal" | "technical",
   "confidence": number
 }
 
-Classify this question:
-"${question}"
+Question: "${question}"
 `;
 
     const r = await openai.chat.completions.create({
-      model: "gpt-4o",
-      temperature: 0.0,
+      model:"gpt-4o",
+      temperature:0,
       messages:[
-        {role:"system", content:"Return ONLY JSON."},
-        {role:"user", content:prompt}
+        {role:"system",content:"Return valid JSON only."},
+        {role:"user",content:prompt}
       ]
     });
 
-    const txt = r.choices[0].message.content.trim();
-    const parsed = JSON.parse(txt);
-    if (parsed.type) return { ...parsed, source:"openai" };
+    const txt=r.choices[0].message.content.trim();
+    const obj=JSON.parse(txt);
+
+    if (obj.type==="personal"||obj.type==="technical")
+      return {...obj,source:"openai"};
+
     return fallback(question);
 
-  } catch {
+  } catch(e){
+    console.error("classifier error",e);
     return fallback(question);
   }
 }
