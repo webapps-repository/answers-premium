@@ -1,7 +1,7 @@
 // /api/utils/generate-pdf.js
 import getStream from "get-stream";
-let PDFDocument;
 
+let PDFDocument;
 try {
   PDFDocument = (await import("pdfkit")).default;
 } catch (e) {
@@ -9,113 +9,84 @@ try {
   throw e;
 }
 
-export async function generatePdfBuffer({
-  headerBrand = "Melodies Web",
-  titleText = "Your Answer",
-  mode = "personal",
-
-  question,
-  answer,
-
-  fullName,
-  birthdate,
-  birthTime,
-  birthPlace,
-
-  astrologySummary,
-  numerologySummary,
-  palmistrySummary,
-
-  numerologyPack = {},
-  astrologyChart = null,
-  palmistryData = null
-}) {
-  const doc = new PDFDocument({ margin: 56 });
-  const chunks = [];
-  doc.on("data", c => chunks.push(c));
-
-  // HEADER
-  doc.fontSize(10).text(headerBrand, { align: "center" });
-  doc.fontSize(22).text(titleText, { align: "center" });
-  doc.moveDown(1.0);
-
-  // QUESTION
-  doc.fontSize(14).text("Question", { underline: true });
-  doc.fontSize(12).text(question);
-  doc.moveDown(1);
-
-  // ANSWER
-  doc.fontSize(14).text("Answer", { underline: true });
-  doc.fontSize(12).text(answer);
-  doc.moveDown(1.4);
-
-  if (mode === "technical") {
-    if (Array.isArray(numerologyPack.technicalKeyPoints)) {
-      doc.fontSize(14).text("Key Points", { underline: true });
-      numerologyPack.technicalKeyPoints.forEach(p => doc.text("• " + p));
-      doc.moveDown(1);
-    }
-    if (numerologyPack.technicalNotes) {
-      doc.fontSize(14).text("Notes", { underline: true });
-      doc.fontSize(12).text(numerologyPack.technicalNotes);
-    }
-    doc.end();
-    return await getStream.buffer(doc);
-  }
-
-  // PERSONAL REPORT CONTENT
-  doc.fontSize(14).text("Your Details", { underline: true });
-  doc.fontSize(12)
-    .text(`Name: ${fullName}`)
-    .text(`Date of Birth: ${birthdate}`)
-    .text(`Time: ${birthTime}`)
-    .text(`Place: ${birthPlace}`);
-  doc.moveDown(1.4);
-
-  // ASTROLOGY
-  doc.fontSize(14).text("Astrology", { underline: true });
-  doc.fontSize(12).text(astrologySummary);
-  doc.moveDown(1);
-
-  // Insert astrology chart image if exists
-  if (astrologyChart) {
-    try {
-      doc.image(astrologyChart, { width: 420 });
-      doc.moveDown(1);
-    } catch {}
-  }
-
-  // NUMEROLOGY
-  doc.fontSize(14).text("Numerology", { underline: true });
-  doc.fontSize(12).text(numerologySummary);
-  doc.moveDown(1);
-
-  const nums = [
-    ["Life Path", numerologyPack.lifePath],
-    ["Expression", numerologyPack.expression],
-    ["Personality", numerologyPack.personality],
-    ["Soul Urge", numerologyPack.soulUrge],
-    ["Maturity", numerologyPack.maturity],
-  ];
-
-  nums.forEach(([label, val]) => {
-    doc.fontSize(12).text(`${label}: ${val}`);
-    doc.moveDown(0.3);
+export async function generatePdfBuffer(opts={}) {
+  const doc = new PDFDocument({
+    margin: 50,
+    info: { Title: opts.titleText || "Your Answer", Author: "Melodies Web" }
   });
 
+  const chunks=[];
+  doc.on("data", c => chunks.push(c));
+  doc.on("end", ()=>{});
+
+  // Header
+  doc.fontSize(10).fillColor("#555").text(opts.headerBrand || "Melodies Web",{align:"center"});
+  doc.moveDown(0.5);
+  doc.fontSize(20).fillColor("#000").text(opts.titleText || "Your Answer",{align:"center"});
   doc.moveDown(1);
 
-  // PALMISTRY
-  doc.fontSize(14).text("Palmistry", { underline: true });
-  doc.fontSize(12).text(palmistrySummary);
+  // Question
+  doc.fontSize(14).fillColor("#222").text("Question",{underline:true});
+  doc.moveDown(0.4);
+  doc.fontSize(12).text(opts.question || "—");
+  doc.moveDown(1);
 
-  if (palmistryData?.image) {
+  // Answer
+  doc.fontSize(14).text("Answer",{underline:true});
+  doc.moveDown(0.4);
+  doc.fontSize(12).text(opts.answer || "—");
+  doc.moveDown(1);
+
+  if (opts.mode === "technical") {
+    const pack = opts.numerologyPack || {};
+    if (Array.isArray(pack.technicalKeyPoints)) {
+      doc.fontSize(14).text("Key Points",{underline:true}); doc.moveDown(0.4);
+      pack.technicalKeyPoints.forEach(p=>doc.fontSize(12).text("• "+p));
+      doc.moveDown(1);
+    }
+    if (pack.technicalNotes) {
+      doc.fontSize(14).text("Notes",{underline:true}); doc.moveDown(0.4);
+      doc.fontSize(12).text(pack.technicalNotes);
+      doc.moveDown(1);
+    }
+  } else {
+    doc.fontSize(14).text("Your Details",{underline:true});
+    doc.moveDown(0.4);
+    doc.fontSize(12)
+      .text(`Name: ${opts.fullName || "—"}`)
+      .text(`Date of Birth: ${opts.birthdate || "—"}`)
+      .text(`Time: ${opts.birthTime || "—"}`)
+      .text(`Place: ${opts.birthPlace || "—"}`);
     doc.moveDown(1);
-    try {
-      doc.image(palmistryData.image, { width: 300 });
-    } catch {}
+
+    doc.fontSize(14).text("Astrology",{underline:true});
+    doc.moveDown(0.4);
+    doc.fontSize(12).text(opts.astrologySummary || "—");
+    doc.moveDown(1);
+
+    doc.fontSize(14).text("Numerology",{underline:true});
+    doc.moveDown(0.4);
+    doc.fontSize(12).text(opts.numerologySummary || "—");
+    doc.moveDown(0.6);
+
+    const np = opts.numerologyPack || {};
+    for (const [key,val] of Object.entries(np)) {
+      if (["lifePath","expression","personality","soulUrge","maturity"].includes(key)) {
+        doc.fontSize(12).fillColor("#111").text(`${key}: ${val}`);
+        doc.fontSize(11).fillColor("#444").text(`Meaning: Interpretation for ${key} ${val}.`);
+        doc.moveDown(0.5);
+      }
+    }
+    doc.moveDown(1);
+
+    doc.fontSize(14).text("Palmistry",{underline:true});
+    doc.moveDown(0.4);
+    doc.fontSize(12).text(opts.palmistrySummary || "—");
+    doc.moveDown(1);
   }
 
+  doc.fontSize(10).fillColor("#777").text("This report is for informational purposes only.",{align:"center"});
   doc.end();
+
   return await getStream.buffer(doc);
 }
