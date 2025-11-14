@@ -1,4 +1,6 @@
 // /api/utils/generate-insights.js
+// GPT-4o advanced insights generation for personal + technical questions
+
 import OpenAI from "openai";
 
 let openai = null;
@@ -6,101 +8,84 @@ if (process.env.OPENAI_API_KEY) {
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
-const model = "gpt-4o";
+// Safe JSON extractor
+async function aiJSON(prompt, fallback = {}) {
+  if (!openai) return fallback;
 
+  try {
+    const r = await openai.chat.completions.create({
+      model: "gpt-4o",
+      temperature: 0.3,
+      messages: [
+        { role: "system", content: "Return ONLY valid JSON." },
+        { role: "user", content: prompt }
+      ],
+    });
+
+    const txt = r.choices?.[0]?.message?.content?.trim() || "{}";
+    return JSON.parse(txt);
+  } catch (e) {
+    console.error("AI JSON parse error:", e);
+    return fallback;
+  }
+}
+
+// ----- PERSONAL REPORT ENGINE -----
 export async function personalSummaries({
   fullName,
   birthISO,
   birthTime,
   birthPlace,
   question,
-  numerologyPack
+  numerologyPack,
+  analyzePalm = false,
+  palmImageBase64 = null
 }) {
-  if (!openai) {
-    return {
-      answer: "A personal answer will appear here.",
-      astrologySummary: "",
-      numerologySummary: "",
-      palmistrySummary: ""
-    };
-  }
-
   const prompt = `
-You are creating PERSONAL spiritual insights.
+Generate a PERSONAL spiritual insight report as JSON:
 
-Provide:
-1. Short answer directly answering the user's question (2–3 sentences).
-2. Short astrology paragraph relevant to question.
-3. Short numerology paragraph relevant to question and numbers:
-   ${JSON.stringify(numerologyPack)}
-4. Short palmistry paragraph relevant to question.
-Return ONLY valid JSON:
 {
-  "answer": "",
-  "astrologySummary": "",
-  "numerologySummary": "",
-  "palmistrySummary": ""
+  "answer": "1 paragraph directly answering the question",
+  "astrologySummary": "1 short paragraph",
+  "numerologySummary": "1 short paragraph that references all 5 numbers",
+  "palmistrySummary": "1 paragraph (or empty if no palm image)"
 }
 
-User:
-Name=${fullName}
-DOB=${birthISO}
-Birth time=${birthTime}
-Birth place=${birthPlace}
-Question=${question}
+QUESTION: ${question}
+
+NAME: ${fullName}
+DOB (ISO): ${birthISO}
+TIME: ${birthTime}
+PLACE: ${birthPlace}
+
+NUMEROLOGY (Pythagorean):
+Life Path = ${numerologyPack.lifePath}
+Expression = ${numerologyPack.expression}
+Personality = ${numerologyPack.personality}
+Soul Urge = ${numerologyPack.soulUrge}
+Maturity = ${numerologyPack.maturity}
+
+PALM IMAGE PROVIDED: ${analyzePalm ? "YES" : "NO"}
+${palmImageBase64 ? "BASE64 IMAGE INCLUDED" : ""}
 `;
 
-  try {
-    const r = await openai.chat.completions.create({
-      model,
-      temperature: 0.7,
-      messages: [{ role: "user", content: prompt }]
-    });
-
-    return JSON.parse(r.choices[0].message.content.trim());
-  } catch (err) {
-    console.error("personalSummaries error:", err);
-    return {
-      answer: "A personal answer appears here.",
-      astrologySummary: "",
-      numerologySummary: "",
-      palmistrySummary: ""
-    };
-  }
+  return await aiJSON(prompt, {});
 }
 
+// ----- TECHNICAL REPORT ENGINE -----
 export async function technicalSummary(question) {
-  if (!openai) {
-    return {
-      answer: "A concise technical answer will appear here.",
-      keyPoints: [],
-      notes: ""
-    };
-  }
-
   const prompt = `
-Provide a concise technical answer.
+Create a concise technical answer as JSON:
 
-Return ONLY JSON:
 {
-  "answer": "",
-  "keyPoints": [],
-  "notes": ""
+  "answer": "2–4 sentences that directly answer the question.",
+  "keyPoints": ["3–6 bullet points"],
+  "notes": "optional additional notes"
 }
 
-User question:
-${question}`;
+QUESTION:
+${question}
+`;
 
-  try {
-    const r = await openai.chat.completions.create({
-      model,
-      temperature: 0.3,
-      messages: [{ role: "user", content: prompt }]
-    });
-
-    return JSON.parse(r.choices[0].message.content.trim());
-  } catch (err) {
-    console.error("techSummary error:", err);
-    return { answer: "Technical answer unavailable.", keyPoints: [], notes: "" };
-  }
+  return await aiJSON(prompt, {});
 }
