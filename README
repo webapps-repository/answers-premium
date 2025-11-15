@@ -1,1 +1,209 @@
-How it works:
+How This Web App Works (Complete Explanation)
+
+This documentation should allow any programmer to fully:
+Understand system data flow
+Understand personal vs technical branching
+Understand how PDFs are built
+Understand how Shopify front-end interacts with Node backend
+Understand reCAPTCHA + Resend + OpenAI workflows
+Maintain or extend the system correctly
+
+1. High-Level Overview
+
+Your application is a Shopify-embedded spiritual / technical answer generator.
+It collects a user question, optionally collects personal data, verifies reCAPTCHA, calls your backend API (Vercel serverless functions), generates an AI-Powered summary + PDF report, emails it to the user via Resend, and displays a short answer on the webpage.
+
+Depending on whether the question is personal or non-personal, two very different workflows are triggered.
+
+2. Frontend (Liquid + JavaScript)
+
+The Liquid template is responsible for:
+
+✔ Rendering the form (mobile-friendly)
+✔ Slide-down personal information fields if user checks “Is this a personal question?”
+✔ Rendering reCAPTCHA v2 Checkbox with explicit mode
+✔ Collecting fields + palm image using FormData
+✔ Sending request to Vercel backend
+✔ Animated progress bar + spinner
+✔ Showing a short answer on-screen
+✔ Triggering “Get Detailed Report (Free)” button
+✔ (NEW) Allowing non-personal users to enter email only when requesting PDF
+✔ Displaying OpenAI censorship warnings if content blocked
+3. reCAPTCHA Workflow
+Frontend
+
+/api/spiritual-report.js — The Main Processor
+
+This endpoint is hit when the user submits the form.
+
+⭐ Responsibilities:
+✔ CORS headers for Shopify embedding
+✔ Parse multipart form using formidable
+✔ Accepts image uploads (palm)
+✔ Allows zero-byte files (important fix)
+✔ Verifies reCAPTCHA
+✔ Reads question + personal fields
+✔ Reads checkbox isPersonal to override classification
+✔ Classifies question with OpenAI (but not used for branching)
+✔ Runs local Pythagorean Numerology calculations
+✔ Calls OpenAI insights generator (astrology, numerology, palmistry or technical)
+✔ Builds a PDF using PDFKit
+✔ Sends email via Resend
+✔ Returns JSON for on-page summary
+✔ Short answer is returned in response.answer
+
+Frontend displays it in the summary box.
+
+✔ For personal questions
+PDF is always generated + emailed automatically.
+
+✔ For technical questions
+PDF is only generated and emailed when user clicks Get Detailed Report → /api/detailed-report.
+
+Question Classification (classify-question.js)
+✔ Uses OpenAI GPT-4o to classify as:
+personal
+technical
+
+✔ Uses fallback keyword classifier if OpenAI fails
+✔ Classification metadata is fed into the prompt for OpenAI
+
+(Helps model generate better content but does NOT determine branching.)
+
+Insights Generation (generate-insights.js)
+This is a critical file.
+Depending on the mode:
+
+A) Personal Question → personalSummaries()
+Generates:
+Short direct answer
+Astrology summary
+Numerology summary
+Palmistry summary
+
+All in relation to:
+The question
+Birth data
+NumerologyPack
+
+The summaries feed into PDF sections:
+Astrological Summary
+Numerological Summary
+Palm Reading Summary
+(from the PDF template)
+
+Technical Question → technicalSummary()
+
+Generates:
+Short answer
+Key points
+Deeper explanation
+Optional cautions or assumptions
+
+Short answer returned to frontend
+Full explanation stored in numerologyPack.technicalNotes (used as container for non-personal data).
+
+PDF Generation (generate-pdf.js)
+✔ Uses PDFKit
+✔ Produces a clean, spaced, readable layout
+✔ Header "Melodies Web"
+✔ Title "Your Answer"
+✔ Uses the PDF structure from your template (tables and summaries)
+
+✔ Personal PDF includes:
+
+Personal data table
+Astrology Summary
+Astrology table
+Numerology Summary
+Numerology table (with numbers injected)
+Palmistry Summary
+Palmistry table
+
+✔ Technical PDF includes:
+
+Question
+Short summary
+Key points
+Explanation 
+
+mail Sending (send-email.js)
+✔ Uses Resend API
+✔ Verified sender: sales@hazcam.io
+✔ Supports binary PDF attachments
+✔ Robust error logging
+
+Detailed Technical PDF Endpoint (/api/detailed-report.js)
+✔ Triggered only when user clicks Get Detailed Report for technical questions
+✔ Accepts question + email
+✔ Generates technical PDF
+✔ Emails it
+✔ Returns JSON to modal
+
+Palmistry Image Upload Handling
+✔ formidable accepts palmImage
+✔ Backend captures filepath
+(Palm analysis is not yet implemented in OpenAI—currently optional but included in summaries.)
+
+AI Censorship Detection (Frontend)
+
+If OpenAI refuses (policy, safety, restricted topics), frontend rewrites:
+"Censored by OpenAI — this question cannot be answered."
+
+Common Failure Causes (pre-fixed)
+🟥 403 Errors
+
+Usually:
+Wrong environment variable name
+Missing RECAPTCHA_SECRET
+Missing RESEND_API_KEY
+
+🟥 404 Errors
+
+Example:
+/api/spiritual-report not found
+→ Usually Shopify referencing path incorrectly or Vercel build missing a file.
+
+🟥 reCAPTCHA not showing
+
+Caused by:
+Wrong sitekey
+Double render
+Shopify JS sandbox
+Not using explicit mode (now fixed)
+
+
+🟥 “Already emailed” issue
+
+Technical questions were being treated as personal → fixed via:
+Checkbox override
+Separate /api/detailed-report
+Short Answer Generation Logic
+
+✔ Short answer is SEMANTIC not mystical
+✔ Generated by OpenAI using structured prompts
+✔ Uses classification hints
+✔ Personal questions also blend astro + numerology + palmistry into one synthesised answer
+
+PDF Template Logic (from provided docs)
+Personal PDF sections:
+
+Your Name, Birth Info, Question
+Your Answer
+Astrological Summary (paragraph)
+Astrology Table
+Numerology Summary
+Numerology Table
+Palmistry Summary
+Palmistry Table
+
+Technical PDF:
+
+Short, clean, one-page style:
+Problem summary
+Key points
+Explanation
+Optional charts (future upgrade)
+
+
+
