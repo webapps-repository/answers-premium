@@ -1,0 +1,359 @@
+<style>
+/* ====== FORM WRAPPER ====== */
+.spiritual-container {
+  max-width: 640px;
+  margin: 30px auto;
+  background: #ffffff;
+  padding: 22px;
+  border-radius: 14px;
+  border: 1px solid #ddd;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+  font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+}
+
+/* Title */
+.spiritual-container h2 {
+  text-align: center;
+  font-size: 1.6rem;
+  margin-bottom: 14px;
+  color: #4B0082;
+}
+
+/* Field labels */
+.spiritual-form label {
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: block;
+  color: #333;
+}
+
+/* Inputs */
+.spiritual-form input,
+.spiritual-form textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  font-size: 1rem;
+  margin-bottom: 14px;
+  box-sizing: border-box;
+}
+
+/* Textarea */
+#question {
+  min-height: 90px;
+  resize: vertical;
+}
+
+/* Personal toggle checkbox */
+.personal-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+.personal-toggle input {
+  width: 20px;
+  height: 20px;
+}
+
+/* Slide-down personal fields */
+#personal-fields {
+  display: none;
+  overflow: hidden;
+  transition: max-height 0.35s ease;
+  max-height: 0;
+}
+
+/* Button */
+.btn-primary {
+  background: #6c63ff;
+  color: #fff;
+  padding: 12px 18px;
+  border-radius: 10px;
+  border: none;
+  font-size: 1.05rem;
+  cursor: pointer;
+  width: 100%;
+  margin-top: 10px;
+  font-weight: 600;
+}
+
+/* Progress Bar */
+.progress-wrapper {
+  margin-top: 15px;
+}
+.progress-bar {
+  width: 100%;
+  height: 8px;
+  background: #eee;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.progress-bar-inner {
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #6c63ff, #8c7cff);
+  transition: width 0.3s linear;
+}
+
+/* Spinner */
+.spinner {
+  display: none;
+  text-align: center;
+  margin-top: 8px;
+  color: #6c63ff;
+}
+
+/* Summary Output */
+#summary-container {
+  display: none;
+  margin-top: 20px;
+}
+.summary-box {
+  background: #f3f1ff;
+  padding: 14px;
+  border-radius: 10px;
+}
+
+/* Detailed Report CTA */
+#detailed-btn {
+  margin-top: 14px;
+  width: 100%;
+  padding: 12px;
+  border-radius: 10px;
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Mobile Tweaks */
+@media (max-width: 600px) {
+  .spiritual-container {
+    margin: 10px;
+    padding: 18px;
+  }
+}
+</style>
+
+<div class="spiritual-container">
+  <h2>Your Question</h2>
+
+  <form id="spiritual-form" class="spiritual-form" enctype="multipart/form-data">
+
+    <!-- PERSONAL QUESTION TOGGLE -->
+    <label class="personal-toggle">
+      <input type="checkbox" id="isPersonal" name="isPersonal" />
+      <span>Is this a personal question? (enter personal information)</span>
+    </label>
+
+    <!-- QUESTION FIELD -->
+    <label>Your Question (max 25 words)</label>
+    <textarea id="question" name="question" maxlength="200" placeholder="Example: Should I change jobs next year?"></textarea>
+
+    <!-- PERSONAL FIELDS -->
+    <div id="personal-fields">
+      <label>Email</label>
+      <input type="email" id="email" name="email"/>
+
+      <label>Full Name</label>
+      <input type="text" id="name" name="name"/>
+
+      <label>Date of Birth (DD-MM-YYYY)</label>
+      <input type="text" id="birthdate" name="birthdate" placeholder="13-03-1995"/>
+
+      <label>Time of Birth (HH:MM)</label>
+      <input type="text" id="birthtime" name="birthtime" placeholder="09:00"/>
+
+      <label>City of Birth</label>
+      <input type="text" id="birthcity" name="birthcity"/>
+
+      <label>State / Region</label>
+      <input type="text" id="birthstate" name="birthstate"/>
+
+      <label>Country of Birth</label>
+      <input type="text" id="birthcountry" name="birthcountry"/>
+
+      <label>Upload Right Palm (optional)</label>
+      <input type="file" id="palmImage" name="palmImage" accept="image/*"/>
+    </div>
+
+    <!-- RECAPTCHA V2 CHECKBOX -->
+    <div id="recaptcha-wrapper" style="width:100%; text-align:center; margin:12px 0;">
+      <div id="recaptcha-box"></div>
+    </div>
+
+    <!-- PRIMARY BUTTON -->
+    <button type="submit" class="btn-primary">Get Answer</button>
+
+    <!-- PROGRESS + SPINNER -->
+    <div class="progress-wrapper">
+      <div class="progress-bar"><div class="progress-bar-inner" id="progress-inner"></div></div>
+      <div class="spinner" id="spinner">Processing… please wait ⏳</div>
+    </div>
+
+  </form>
+
+  <!-- SUMMARY -->
+  <div id="summary-container">
+    <h3>Short Answer</h3>
+    <div class="summary-box" id="answer-summary">—</div>
+    <button id="detailed-btn">Get Detailed Report (Free)</button>
+  </div>
+</div>
+
+<!-- RECAPTCHA SCRIPT -->
+<script src="https://www.google.com/recaptcha/api.js?onload=onLoadRecaptcha&render=explicit" async defer></script>
+
+<script>
+/* ===============================
+   GLOBALS
+=============================== */
+const API_URL = "https://answers-rust.vercel.app/api/spiritual-report";
+let recaptchaWidgetId = null;
+let recaptchaReady = false;
+
+/* ===============================
+   EXPLICIT RECAPTCHA RENDER
+=============================== */
+function safeRenderRecaptcha() {
+  const box = document.getElementById("recaptcha-box");
+  if (!box) return;
+  if (recaptchaWidgetId !== null) return;
+  if (typeof grecaptcha === "undefined") return;
+
+  recaptchaWidgetId = grecaptcha.render("recaptcha-box", {
+    sitekey: "6LdAOgYsAAAAAFgNlxLkahtIAbZc4XcIJt2hfLsj",
+    theme: "light",
+    size: "normal",
+    callback: function(token) {
+      console.log("reCAPTCHA token:", token);
+    },
+    "expired-callback": function() {
+      console.log("reCAPTCHA expired → reset");
+      grecaptcha.reset(recaptchaWidgetId);
+    }
+  });
+
+  recaptchaReady = true;
+}
+
+function onLoadRecaptcha() {
+  setTimeout(safeRenderRecaptcha, 300);
+}
+
+document.addEventListener("DOMContentLoaded", safeRenderRecaptcha);
+document.addEventListener("shopify:section:load", safeRenderRecaptcha);
+
+/* ===============================
+   PERSONAL FIELDS SLIDE-DOWN
+=============================== */
+const personalCheckbox = document.getElementById("isPersonal");
+const personalFields = document.getElementById("personal-fields");
+
+personalCheckbox.addEventListener("change", () => {
+  if (personalCheckbox.checked) {
+    personalFields.style.display = "block";
+    personalFields.style.maxHeight = personalFields.scrollHeight + "px";
+  } else {
+    personalFields.style.maxHeight = "0px";
+    setTimeout(() => { personalFields.style.display = "none"; }, 300);
+  }
+});
+
+/* ===============================
+   FORM SUBMISSION
+=============================== */
+const form = document.getElementById("spiritual-form");
+const spinner = document.getElementById("spinner");
+const progressInner = document.getElementById("progress-inner");
+const summaryContainer = document.getElementById("summary-container");
+const answerSummary = document.getElementById("answer-summary");
+const detailedBtn = document.getElementById("detailed-btn");
+
+function animateProgress() {
+  progressInner.style.width = "0%";
+  setTimeout(() => { progressInner.style.width = "30%"; }, 120);
+  setTimeout(() => { progressInner.style.width = "60%"; }, 620);
+  setTimeout(() => { progressInner.style.width = "85%"; }, 1220);
+}
+
+function finishProgress() {
+  progressInner.style.width = "100%";
+  setTimeout(() => { progressInner.style.width = "0%"; }, 1600);
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  if (!recaptchaReady) {
+    alert("reCAPTCHA still loading… please wait 1–2 seconds.");
+    return;
+  }
+
+  const token = grecaptcha.getResponse(recaptchaWidgetId);
+  if (!token) {
+    alert("Please complete the reCAPTCHA.");
+    return;
+  }
+
+  spinner.style.display = "block";
+  animateProgress();
+
+  const formData = new FormData(form);
+  formData.append("g-recaptcha-response", token);
+
+  let responseData = null;
+
+  try {
+    const response = await fetch(API_URL, {
+      method: "POST",
+      body: formData
+    });
+
+    const text = await response.text();
+    try {
+      responseData = JSON.parse(text);
+    } catch (err) {
+      console.error("❌ Invalid JSON:", text);
+      throw new Error("Server returned non-JSON (HTML error page)");
+    }
+
+  } catch (err) {
+    spinner.style.display = "none";
+    finishProgress();
+    alert("Server error: " + err.message);
+    return;
+  }
+
+  spinner.style.display = "none";
+  finishProgress();
+
+  // CENSORSHIP DETECTION
+  let shortAnswer = responseData.answer || "No answer received.";
+  const lowered = shortAnswer.toLowerCase();
+  if (
+    lowered.includes("not permitted") ||
+    lowered.includes("policy") ||
+    lowered.includes("assist with that request")
+  ) {
+    shortAnswer = "⚠️ Censored by OpenAI — this question cannot be answered.";
+  }
+
+  answerSummary.textContent = shortAnswer;
+  summaryContainer.style.display = "block";
+
+  // Reset for next question
+  grecaptcha.reset(recaptchaWidgetId);
+});
+
+/* ===============================
+   DETAILED REPORT
+=============================== */
+detailedBtn.addEventListener("click", () => {
+  alert("Your detailed report has already been emailed!");
+});
+</script>
