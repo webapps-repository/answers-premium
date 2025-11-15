@@ -1,76 +1,121 @@
 // /api/utils/generate-insights.js
+// PERSONAL + TECHNICAL insight generation with JSON-safe parsing.
+
 import OpenAI from "openai";
-let client = process.env.OPENAI_API_KEY ? new OpenAI({ apiKey:process.env.OPENAI_API_KEY }) : null;
 
-const fallbackPersonal = () => ({
-  answer: "Your personal answer is ready.",
-  astrologySummary:"Astrology unavailable.",
-  numerologySummary:"Numerology unavailable.",
-  palmistrySummary:"Palmistry unavailable."
-});
+let openai = null;
+if (process.env.OPENAI_API_KEY) {
+  openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+}
 
-const fallbackTechnical = () => ({
-  answer:"Here is a concise technical answer.",
-  keyPoints:[],
-  notes:""
-});
+// --------- FIX: clean JSON ----------
+function cleanJSON(text = "") {
+  return text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .replace(/^\s*[\r\n]+/, "")
+    .trim();
+}
 
-export async function personalSummaries(data){
-  if(!client) return fallbackPersonal();
+// ---------------- PERSONAL ----------------
+export async function personalSummaries(payload = {}) {
+  if (!openai) {
+    return {
+      answer: "Personal insight unavailable.",
+      astrologySummary: "",
+      numerologySummary: "",
+      palmistrySummary: ""
+    };
+  }
 
   const prompt = `
-Provide a SHORT direct answer first (1–2 sentences).
+You are producing a spiritual personal reading with:
+- astrology summary
+- numerology summary
+- palmistry summary
+- short answer summary
 
-Then provide:
-- astrologySummary (2–4 sentences)
-- numerologySummary (2–4 sentences)
-- palmistrySummary (2–4 sentences)
+Return STRICT JSON only with this shape:
 
-Return JSON ONLY.
+{
+  "answer": "...",
+  "astrologySummary": "...",
+  "numerologySummary": "...",
+  "palmistrySummary": "..."
+}
 
-USER DATA:
-${JSON.stringify(data,null,2)}
-  `;
+User data:
+${JSON.stringify(payload, null, 2)}
+`;
 
-  try{
-    const r = await client.chat.completions.create({
-      model:"gpt-4o",
-      temperature:0.3,
-      messages:[{role:"user",content:prompt}]
-    });
+  const result = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0.5,
+    messages: [
+      { role: "system", content: "Return ONLY valid JSON. Do NOT use code blocks." },
+      { role: "user", content: prompt }
+    ]
+  });
 
-    return JSON.parse(r.choices[0].message.content.trim());
-  }catch(e){
-    console.error("personalSummaries error", e);
-    return fallbackPersonal();
+  let raw = result.choices?.[0]?.message?.content || "{}";
+
+  try {
+    const parsed = JSON.parse(cleanJSON(raw));
+    return parsed;
+  } catch (err) {
+    console.error("❌ personalSummaries error", raw, err);
+    return {
+      answer: "Personal summary unavailable.",
+      astrologySummary: "",
+      numerologySummary: "",
+      palmistrySummary: ""
+    };
   }
 }
 
-export async function technicalSummary(question){
-  if(!client) return fallbackTechnical();
+// ---------------- TECHNICAL ----------------
+export async function technicalSummary(question) {
+  if (!openai) {
+    return {
+      answer: "Technical answer unavailable",
+      keyPoints: [],
+      notes: ""
+    };
+  }
 
   const prompt = `
-Provide a SHORT technical answer (1–2 sentences).
+Provide a technical answer.
 
-Also provide:
-- keyPoints (3–6 concise bullets)
-- notes (1–2 sentences)
+Return only JSON in this exact shape:
+{
+  "answer": "...",
+  "keyPoints": ["...", "..."],
+  "notes": "..."
+}
 
-Return JSON ONLY.
-
-Question: "${question}"
+Question:
+${question}
 `;
 
-  try{
-    const r = await client.chat.completions.create({
-      model:"gpt-4o",
-      temperature:0.2,
-      messages:[{role:"user",content:prompt}]
-    });
+  const result = await openai.chat.completions.create({
+    model: "gpt-4o",
+    temperature: 0.3,
+    messages: [
+      { role: "system", content: "Return ONLY valid JSON. Do NOT use code fences." },
+      { role: "user", content: prompt }
+    ]
+  });
 
-    return JSON.parse(r.choices[0].message.content.trim());
-  }catch(e){
-    console.error("technicalSummary error", e);
-    return fallbackTechnical();
+  let raw = result.choices?.[0]?.message?.content || "{}";
+
+  try {
+    return JSON.parse(cleanJSON(raw));
+  } catch (err) {
+    console.error("❌ technicalSummary error", raw, err);
+    return {
+      answer: "Technical summary unavailable.",
+      keyPoints: [],
+      notes: ""
+    };
   }
 }
