@@ -6,7 +6,6 @@
   background: #ffffff;
   padding: 20px 22px;
   border-radius: 14px;
-  border: 1px solid #ddd;
   box-shadow: 0 6px 24px rgba(0,0,0,0.12);
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
 }
@@ -19,6 +18,11 @@
   color: #4B0082;
 }
 
+/* Center content */
+.spiritual-form {
+  width: 100%;
+}
+
 /* Field labels */
 .spiritual-form label {
   font-weight: 600;
@@ -29,21 +33,24 @@
 
 /* Inputs */
 .spiritual-form input,
-.spiritual-form textarea {
+.spiritual-form textarea,
+.spiritual-form select {
   width: 100%;
   padding: 10px 12px;
   border-radius: 8px;
-  border: 1px solid #bbb;
+  border: 1px solid #ccc;
   font-size: 1rem;
   margin-bottom: 14px;
+  box-sizing: border-box;
 }
 
+/* Textarea */
 #question {
   min-height: 90px;
   resize: vertical;
 }
 
-/* Personal toggle */
+/* Checkbox personal section */
 .personal-toggle {
   display: flex;
   align-items: center;
@@ -57,7 +64,7 @@
   height: 20px;
 }
 
-/* SLIDE-DOWN personal fields */
+/* Personal section (slide down) */
 #personal-fields {
   display: none;
   overflow: hidden;
@@ -79,7 +86,7 @@
   font-weight: 600;
 }
 
-/* Progress + Spinner */
+/* Progress Bar */
 .progress-wrapper {
   margin-top: 15px;
 }
@@ -97,6 +104,7 @@
   transition: width 0.3s linear;
 }
 
+/* Spinner */
 .spinner {
   display: none;
   text-align: center;
@@ -115,7 +123,7 @@
   border-radius: 10px;
 }
 
-/* Detailed Report */
+/* Detailed Report CTA */
 #detailed-btn {
   margin-top: 14px;
   width: 100%;
@@ -128,71 +136,84 @@
   cursor: pointer;
 }
 
-/* MODAL */
-.modal-overlay {
-  display: none;
+/* ===== MODAL ===== */
+#email-modal-backdrop {
   position: fixed;
-  top:0; left:0;
-  width:100%; height:100%;
-  background: rgba(0,0,0,0.55);
-  z-index: 9999;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.45);
+  display: none;
+  justify-content: center;
+  align-items: center;
+  z-index: 999999;
 }
 
-.modal-box {
-  max-width: 380px;
-  margin: 120px auto;
+#email-modal {
   background: white;
-  padding: 20px;
-  border-radius: 12px;
-  text-align:center;
-  box-shadow:0 6px 24px rgba(0,0,0,0.2);
+  padding: 28px;
+  width: 95%;
+  max-width: 420px;
+  border-radius: 14px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  text-align: center;
 }
 
-.modal-box input {
+#email-modal h3 {
+  font-size: 1.35rem;
+  margin-bottom: 18px;
+  color: #222;
+}
+
+.modal-btn {
   width: 100%;
-  padding:10px;
-  margin-top:12px;
-  border:1px solid #bbb;
-  border-radius:8px;
+  padding: 12px;
+  margin-top: 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
 }
 
-.modal-box button {
-  margin-top:14px;
-  background:#4caf50;
-  color:white;
-  padding:12px;
-  border:none;
-  width:100%;
-  border-radius:10px;
-  font-weight:600;
-  cursor:pointer;
+.modal-send {
+  background: #4caf50;
+  color: white;
+  font-weight: 600;
 }
 
-.modal-close {
-  margin-top:10px;
-  background:#bbb;
+.modal-cancel {
+  background: #ccc;
+  color: black;
 }
 
-/* Mobile */
-@media (max-width:600px){
-  .spiritual-container { margin:10px; padding:18px; }
+/* Mobile Tweaks */
+@media (max-width: 600px) {
+  .spiritual-container {
+    margin: 10px;
+    padding: 18px;
+  }
 }
 </style>
+
+
+<!-- ======================= HTML ======================= -->
 
 <div class="spiritual-container">
   <h2>Your Question</h2>
 
   <form id="spiritual-form" class="spiritual-form" enctype="multipart/form-data">
 
+    <!-- PERSONAL QUESTION TOGGLE -->
     <label class="personal-toggle">
       <input type="checkbox" id="isPersonal" name="isPersonal" />
       <span>Is this a personal question? (enter personal information)</span>
     </label>
 
+    <!-- QUESTION FIELD -->
     <label>Your Question (max 25 words)</label>
-    <textarea id="question" name="question" maxlength="200" placeholder="Example: Should I change jobs next year?"></textarea>
+    <textarea id="question" name="question" maxlength="200"
+              placeholder="Example: Should I change jobs next year?"></textarea>
 
-    <!-- Personal fields -->
+    <!-- PERSONAL FIELDS -->
     <div id="personal-fields">
       <label>Email</label>
       <input type="email" id="email" name="email" />
@@ -203,200 +224,281 @@
       <label>Date of Birth (DD-MM-YYYY)</label>
       <input type="text" id="birthdate" name="birthdate" placeholder="13-03-1995" />
 
-      <label>Time of Birth</label>
+      <label>Time of Birth (HH:MM)</label>
       <input type="text" id="birthtime" name="birthtime" placeholder="09:00" />
 
-      <label>City</label>
+      <label>City of Birth</label>
       <input type="text" id="birthcity" name="birthcity" />
 
-      <label>State</label>
+      <label>State / Region</label>
       <input type="text" id="birthstate" name="birthstate" />
 
-      <label>Country</label>
+      <label>Country of Birth</label>
       <input type="text" id="birthcountry" name="birthcountry" />
 
-      <label>Right Palm Image (optional)</label>
+      <label>Upload Right Palm (optional)</label>
       <input type="file" id="palmImage" name="palmImage" accept="image/*" />
     </div>
 
-    <!-- reCAPTCHA visible checkbox -->
+    <!-- RECAPTCHA -->
     <div id="recaptcha-box" style="margin: 12px 0;"></div>
 
     <button type="submit" class="btn-primary">Get Answer</button>
 
     <div class="progress-wrapper">
-      <div class="progress-bar"><div id="progress-inner" class="progress-bar-inner"></div></div>
-      <div id="spinner" class="spinner">Processing… please wait ⏳</div>
+      <div class="progress-bar"><div class="progress-bar-inner" id="progress-inner"></div></div>
+      <div class="spinner" id="spinner">Processing… please wait ⏳</div>
     </div>
   </form>
 
   <div id="summary-container">
     <h3>Short Answer</h3>
-    <div id="answer-summary" class="summary-box">—</div>
+    <div class="summary-box" id="answer-summary">—</div>
 
     <button id="detailed-btn">Get Detailed Report (Free)</button>
   </div>
 </div>
 
-<!-- MODAL for technical email collection -->
-<div id="email-modal" class="modal-overlay">
-  <div class="modal-box">
+
+<!-- ===== MODAL HTML ===== -->
+<div id="email-modal-backdrop">
+  <div id="email-modal">
     <h3>Enter your email to receive the full PDF</h3>
-    <input type="email" id="modal-email" placeholder="you@example.com" />
-    <button id="modal-send">Send Report</button>
-    <button class="modal-close" id="modal-close">Cancel</button>
+
+    <input type="email" id="modal-email" placeholder="you@example.com"
+           style="width:100%;padding:10px;border:1px solid #ccc;border-radius:8px;" />
+
+    <button id="modal-send" class="modal-btn modal-send">Send Report</button>
+    <button id="modal-cancel" class="modal-btn modal-cancel">Cancel</button>
   </div>
 </div>
 
-<!-- reCAPTCHA -->
+
+<!-- RECAPTCHA -->
 <script src="https://www.google.com/recaptcha/api.js?onload=onLoadRecaptcha&render=explicit" async defer></script>
 
+
 <script>
-const API_SHORT = "https://answers-rust.vercel.app/api/spiritual-report";
-const API_PDF   = "https://answers-rust.vercel.app/api/detailed-report";
+/* ============================================================
+   CONFIG
+============================================================ */
+const API_SUMMARY = "https://answers-rust.vercel.app/api/spiritual-report";
+const API_PDF = "https://answers-rust.vercel.app/api/detailed-report";
 
 let recaptchaWidgetId = null;
 let recaptchaReady = false;
 
-// =============== reCAPTCHA ===============
-function onLoadRecaptcha(){
+
+/* ============================================================
+   RECAPTCHA
+============================================================ */
+function onLoadRecaptcha() {
   const box = document.getElementById("recaptcha-box");
+  if (!box) return;
+
+  if (recaptchaWidgetId !== null) return;
+
   recaptchaWidgetId = grecaptcha.render("recaptcha-box", {
     sitekey: "6LdAOgYsAAAAAFgNlxLkahtIAbZc4XcIJt2hfLsj",
-    theme:"light",
-    size:"normal",
+    theme: "light",
+    size: "normal",
+    callback: (t) => console.log("reCAPTCHA token:", t),
   });
+
   recaptchaReady = true;
 }
 
-// =============== Slide-down ===============
+
+/* ============================================================
+   DOM ELEMENTS
+============================================================ */
+const form = document.getElementById("spiritual-form");
 const personalCheckbox = document.getElementById("isPersonal");
 const personalFields = document.getElementById("personal-fields");
 
-personalCheckbox.addEventListener("change",()=>{
-  if(personalCheckbox.checked){
-    personalFields.style.display="block";
-    personalFields.style.maxHeight = personalFields.scrollHeight+"px";
+const spinner = document.getElementById("spinner");
+const progressInner = document.getElementById("progress-inner");
+const summaryContainer = document.getElementById("summary-container");
+const answerSummary = document.getElementById("answer-summary");
+
+const detailedBtn = document.getElementById("detailed-btn");
+
+const modalBackdrop = document.getElementById("email-modal-backdrop");
+const modalEmail = document.getElementById("modal-email");
+const modalSend = document.getElementById("modal-send");
+const modalCancel = document.getElementById("modal-cancel");
+
+
+/* ============================================================
+   SLIDE DOWN PERSONAL FIELDS
+============================================================ */
+personalCheckbox.addEventListener("change", () => {
+  if (personalCheckbox.checked) {
+    personalFields.style.display = "block";
+    personalFields.style.maxHeight = personalFields.scrollHeight + "px";
   } else {
-    personalFields.style.maxHeight="0px";
-    setTimeout(()=>personalFields.style.display="none",300);
+    personalFields.style.maxHeight = "0px";
+    setTimeout(() => { personalFields.style.display = "none"; }, 300);
   }
 });
 
-// =============== Submit Short Answer ===============
-const form = document.getElementById("spiritual-form");
-const progressInner = document.getElementById("progress-inner");
-const spinner = document.getElementById("spinner");
-const summary = document.getElementById("summary-container");
-const answerBox = document.getElementById("answer-summary");
 
-let lastShortAnswer = "";
-let lastPayload = null;
-
-function animateProgress(){
-  progressInner.style.width="0%";
-  setTimeout(()=>progressInner.style.width="35%",100);
-  setTimeout(()=>progressInner.style.width="70%",600);
-  setTimeout(()=>progressInner.style.width="90%",1200);
+/* ============================================================
+   PROGRESS BAR
+============================================================ */
+function animateProgress() {
+  progressInner.style.width = "0%";
+  setTimeout(() => { progressInner.style.width = "30%"; }, 100);
+  setTimeout(() => { progressInner.style.width = "60%"; }, 600);
+  setTimeout(() => { progressInner.style.width = "85%"; }, 1200);
 }
 
-function finishProgress(){
-  progressInner.style.width="100%";
-  setTimeout(()=>progressInner.style.width="0%",1500);
+function finishProgress() {
+  progressInner.style.width = "100%";
+  setTimeout(() => { progressInner.style.width = "0%"; }, 1500);
 }
 
-form.addEventListener("submit", async e=>{
+
+/* ============================================================
+   SUBMIT — SHORT ANSWER
+============================================================ */
+form.addEventListener("submit", async (e) => {
   e.preventDefault();
-  if(!recaptchaReady) return alert("reCAPTCHA loading...");
 
-  const token = grecaptcha.getResponse(recaptchaWidgetId);
-  if(!token) return alert("Please complete the reCAPTCHA");
-
-  spinner.style.display="block";
-  animateProgress();
-
-  const fd = new FormData(form);
-  fd.append("g-recaptcha-response", token);
-
-  let json;
-  try{
-    const r = await fetch(API_SHORT,{ method:"POST", body:fd });
-    const tx = await r.text();
-    json = JSON.parse(tx);
-  }catch(err){
-    spinner.style.display="none";
-    finishProgress();
-    return alert("Server error: "+err.message);
+  if (!recaptchaReady) {
+    alert("reCAPTCHA still loading…");
+    return;
   }
 
-  spinner.style.display="none";
+  const token = grecaptcha.getResponse(recaptchaWidgetId);
+  if (!token) {
+    alert("Please complete the reCAPTCHA.");
+    return;
+  }
+
+  spinner.style.display = "block";
+  animateProgress();
+
+  const formData = new FormData(form);
+  formData.append("g-recaptcha-response", token);
+
+  let result;
+
+  try {
+    const raw = await fetch(API_SUMMARY, { method: "POST", body: formData });
+    const text = await raw.text();
+
+    try {
+      result = JSON.parse(text);
+    } catch (err) {
+      console.error("JSON error:", text);
+      throw new Error("Invalid server response");
+    }
+  } catch (err) {
+    spinner.style.display = "none";
+    finishProgress();
+    alert("Server error: " + err.message);
+    return;
+  }
+
+  spinner.style.display = "none";
   finishProgress();
 
-  // Save payload for PDF
-  lastPayload = json;
+  // CENSOR DETECTION
+  let shortAnswer = result.answer || "No answer received.";
+  const lc = shortAnswer.toLowerCase();
+  if (lc.includes("policy") || lc.includes("not permitted") || lc.includes("cannot assist")) {
+    shortAnswer = "⚠️ Censored by OpenAI — this question cannot be answered.";
+  }
 
-  let ans = json.answer || "No answer.";
-  const low = ans.toLowerCase();
-  if(low.includes("policy") || low.includes("not permitted") || low.includes("cannot assist"))
-    ans = "⚠️ Censored by OpenAI — this question cannot be answered.";
-
-  lastShortAnswer = ans;
-
-  answerBox.textContent = ans;
-  summary.style.display="block";
+  answerSummary.textContent = shortAnswer;
+  summaryContainer.style.display = "block";
 
   grecaptcha.reset(recaptchaWidgetId);
 });
 
-// =============== Modal for Technical PDF ===============
-const modal = document.getElementById("email-modal");
-const modalEmail = document.getElementById("modal-email");
-const modalSend = document.getElementById("modal-send");
-const modalClose = document.getElementById("modal-close");
 
-// Open modal if technical question
-const detailedBtn = document.getElementById("detailed-btn");
-detailedBtn.addEventListener("click", ()=>{
-  if(!lastPayload) return alert("No answer yet.");
+/* ============================================================
+   PDF BUTTON — show modal if needed
+============================================================ */
+detailedBtn.addEventListener("click", () => {
+  const isPersonal = personalCheckbox.checked;
+  const emailField = document.getElementById("email").value.trim();
 
-  if(lastPayload.personal){
-    alert("Your detailed report has already been emailed!");
-  } else {
-    modal.style.display="block";
+  // PERSONAL → email already provided
+  if (isPersonal && emailField) {
+    sendReport(emailField);
+    return;
   }
+
+  // TECHNICAL → must ask for email
+  modalBackdrop.style.display = "flex";
 });
 
-modalClose.addEventListener("click", ()=> modal.style.display="none");
 
-// Send PDF request
-modalSend.addEventListener("click", async ()=>{
-  const email = modalEmail.value.trim();
-  if(!email) return alert("Enter your email");
+modalCancel.addEventListener("click", () => {
+  modalBackdrop.style.display = "none";
+});
 
-  const fd = new FormData();
-  fd.append("email", email);
-  fd.append("question", form.querySelector("#question").value);
-  fd.append("answer", lastShortAnswer);
-  fd.append("personal", "false");
 
-  fd.append("astrologySummary", lastPayload.astrologySummary||"");
-  fd.append("numerologySummary", lastPayload.numerologySummary||"");
-  fd.append("palmistrySummary", lastPayload.palmistrySummary||"");
-  fd.append("numerologyPack", JSON.stringify(lastPayload.numerologyPack||{}));
+modalSend.addEventListener("click", () => {
+  const entered = modalEmail.value.trim();
+  if (!entered) {
+    alert("Please enter an email address");
+    return;
+  }
 
-  try{
-    const r = await fetch(API_PDF,{ method:"POST", body:fd });
-    const tx = await r.text();
-    const js = JSON.parse(tx);
+  modalBackdrop.style.display = "none";
+  sendReport(entered);
+});
 
-    if(js.success){
-      modal.style.display="none";
-      alert("Your detailed report has been emailed!");
-    } else {
-      alert("Error: "+(js.error||"unknown"));
+
+/* ============================================================
+   SEND REPORT → /api/detailed-report
+============================================================ */
+async function sendReport(email) {
+  const question = document.getElementById("question").value.trim();
+  const isPersonal = personalCheckbox.checked;
+
+  const formData = new FormData();
+  formData.append("email", email);
+  formData.append("question", question);
+  formData.append("isPersonal", isPersonal);
+
+  if (isPersonal) {
+    formData.append("name", document.getElementById("name").value);
+    formData.append("birthdate", document.getElementById("birthdate").value);
+    formData.append("birthtime", document.getElementById("birthtime").value);
+    formData.append("birthcity", document.getElementById("birthcity").value);
+    formData.append("birthstate", document.getElementById("birthstate").value);
+    formData.append("birthcountry", document.getElementById("birthcountry").value);
+  }
+
+  try {
+    const raw = await fetch(API_PDF, {
+      method: "POST",
+      body: formData,
+    });
+
+    const text = await raw.text();
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      console.error("Non-JSON:", text);
+      throw new Error("Invalid server response");
     }
-  }catch(err){
-    alert("Server error: "+err.message);
+
+    if (!json.success) {
+      alert("Email error: " + (json.error || "unknown error"));
+      return;
+    }
+
+    alert("Your detailed report has been emailed!");
+
+  } catch (err) {
+    alert("Failed to send report: " + err.message);
   }
-});
+}
 </script>
