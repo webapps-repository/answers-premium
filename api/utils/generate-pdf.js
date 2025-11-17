@@ -127,3 +127,4 @@ export function generatePDF({
 
         createSectionHeader(doc, "Detailed Explanation");
         doc.text(insights.explanation, { align: "left" }).moveDown();
+      }
