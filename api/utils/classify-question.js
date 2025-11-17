@@ -1,96 +1,61 @@
 // /api/utils/classify-question.js
-// Robust, crash-proof classifier with safe JSON parsing + fallback mode
-
 import OpenAI from "openai";
 
-// Init client
 let client = process.env.OPENAI_API_KEY
   ? new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   : null;
 
-// ---------------------------------------------------------------------------
 // Fallback classifier
-// ---------------------------------------------------------------------------
-const fallback = (q = "") => {
+function fallback(q = "") {
   const t = q.toLowerCase();
 
-  const checks = {
-    love: ["love", "relationship", "marriage", "partner", "soulmate", "dating"],
-    career: ["career", "job", "promotion", "work", "business"],
-    money: ["money", "finance", "wealth", "income", "investment"],
-    health: ["health", "ill", "sick", "heal", "body"],
-    spiritual: ["spiritual", "soul", "meaning", "purpose", "awakening"],
+  const intents = {
+    love: ["love", "relationship", "partner", "marriage"],
+    career: ["career", "job", "work", "promotion"],
+    money: ["money", "finance", "income", "wealth"],
+    health: ["health", "body", "ill", "heal"],
+    spiritual: ["spiritual", "soul", "meaning"],
   };
 
   let detected = "general";
 
-  for (const key of Object.keys(checks)) {
-    if (checks[key].some((w) => t.includes(w))) {
-      detected = key;
-      break;
-    }
+  for (const k of Object.keys(intents)) {
+    if (intents[k].some((x) => t.includes(x))) detected = k;
   }
-
-  const isPersonal = detected !== "general";
 
   return {
-    type: isPersonal ? "personal" : "technical",
+    type: detected === "general" ? "technical" : "personal",
     intent: detected,
-    confidence: 0.35,
+    confidence: 0.3,
     tone: "neutral",
-    source: "fallback",
   };
-};
+}
 
-// ---------------------------------------------------------------------------
-// EXPORT: classifyQuestion
-// ---------------------------------------------------------------------------
-export async function classifyQuestion(question = "") {
-  if (!client) {
-    console.warn("⚠ No OPENAI_API_KEY, using fallback classifier.");
-    return fallback(question);
-  }
+export async function classifyQuestion(question) {
+  if (!client) return fallback(question);
 
   try {
     const prompt = `
-Classify the following user question:
+Classify this question: "${question}"
 
-"${question}"
-
-Return ONLY this JSON schema:
-
+Return ONLY JSON:
 {
   "type": "personal" | "technical",
-  "intent": "love" | "career" | "money" | "health" | "spiritual" | "personal_growth" | "life_direction" | "technical" | "general",
+  "intent": "love" | "career" | "money" | "health" | "spiritual" | "general",
   "confidence": number,
   "tone": "emotional" | "neutral" | "urgent" | "curious"
-}
-`;
+}`;
 
     const r = await client.chat.completions.create({
       model: "gpt-4o-mini",
       temperature: 0,
-      response_format: { type: "json_object" },
       messages: [{ role: "user", content: prompt }],
+      response_format: { type: "json_object" },
     });
 
-    // SAFELY extract JSON
-    const parsed = r?.choices?.[0]?.message?.parsed;
-
-    if (!parsed) {
-      console.error("❌ classifyQuestion: OpenAI returned invalid JSON.");
-      return fallback(question);
-    }
-
-    if (!parsed.intent) {
-      console.warn("⚠ classifyQuestion: Missing intent, applying fallback.");
-      return fallback(question);
-    }
-
-    return parsed;
-
-  } catch (e) {
-    console.error("❌ classifyQuestion error:", e);
+    return r.choices[0].message.parsed;
+  } catch (err) {
+    console.error("Classification error:", err);
     return fallback(question);
   }
 }
