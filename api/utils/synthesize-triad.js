@@ -1,7 +1,6 @@
 // /api/utils/synthesize-triad.js
-// -----------------------------------------------------------
-// Merges Astrology + Numerology + Palmistry into unified report
-// -----------------------------------------------------------
+// UPDATED — meaningful short answer, safe intent, no repetition,
+// improved interpretation text.
 
 export function synthesizeTriad({
   question,
@@ -10,151 +9,124 @@ export function synthesizeTriad({
   numerology,
   palmistry,
 }) {
+  const shortAnswer = generateShortAnswer({
+    question,
+    intent,
+    astrology,
+    numerology,
+    palmistry,
+  });
+
+  const astroInterpretation = generateAstrologicalInterpretation({
+    question,
+    intent,
+    astrology,
+  });
+
+  const numerologyInterpretation = generateNumerologicalInterpretation({
+    question,
+    intent,
+    numerology,
+  });
+
+  const palmInterpretation = generatePalmistryInterpretation({
+    question,
+    intent,
+    palmistry,
+  });
+
+  const combined = generateCombinedSynthesis({
+    question,
+    intent,
+    astrology,
+    numerology,
+    palmistry,
+  });
+
+  const timeline = generateTimeline({
+    intent,
+    astrology,
+    numerology,
+  });
+
+  const recommendations = generateRecommendations({
+    intent,
+    astrology,
+    numerology,
+    palmistry,
+  });
+
   return {
-    shortAnswer: generateShortAnswer({ question, intent, astrology, numerology }),
-    astroInterpretation: generateAstrologyInterpretation({
-      question,
-      intent,
-      astrology,
-    }),
-    numerologyInterpretation: generateNumerologyInterpretation({
-      question,
-      intent,
-      numerology,
-    }),
-    palmInterpretation: generatePalmistryInterpretation({
-      question,
-      intent,
-      palmistry,
-    }),
-    combined: generateCombinedSynthesis({
-      question,
-      intent,
-      astrology,
-      numerology,
-      palmistry,
-    }),
-    timeline: generateTimeline({ intent, astrology, numerology }),
-    recommendations: generateRecommendations({
-      intent,
-      astrology,
-      numerology,
-      palmistry,
-    }),
+    shortAnswer,
+    astroInterpretation,
+    numerologyInterpretation,
+    palmInterpretation,
+    combined,
+    timeline,
+    recommendations,
   };
 }
 
-// ==========================================================
-// SHORT ANSWER
-// ==========================================================
-function generateShortAnswer({ question, intent, astrology, numerology, palmistry }) {
-  
-  // -----------------------------
-  // Intent-based core message
-  // -----------------------------
-  const intentMessages = {
-    love: "your emotional patterns and relationship cycles are highlighted",
-    career: "your vocational rhythm and growth cycles are activating strongly",
-    money: "your financial pathway shows upcoming shifts in stability and opportunity",
-    health: "your wellbeing cycles point to renewal and stabilisation",
-    spiritual: "your intuitive and inner-growth pathways are opening clearly",
-    personal_growth: "your self-development cycle is entering a transformative phase",
-    life_direction: "your directional energy is clarifying and aligning",
-    general: "your overall energetic pattern is becoming clearer",
-  };
+// ===============================================================
+// SHORT ANSWER — rewritten to be meaningful & contextual
+// ===============================================================
+function generateShortAnswer({ question, intent, astrology, numerology }) {
+  const readableIntent = intent?.replace(/_/g, " ") || "your situation";
 
-  const base = intentMessages[intent] || intentMessages.general;
-
-  // -----------------------------
-  // Astrology signals
-  // -----------------------------
-  const astroKey =
-    astrology && (astrology.sun || astrology.moon || astrology.rising)
-      ? `Your core placements — Sun: ${astrology.sun || "?"}, Moon: ${astrology.moon ||
-          "?"}, Rising: ${astrology.rising || "?"} — show a pattern that connects directly to this question.`
-      : "";
-
-  // -----------------------------
-  // Numerology signals
-  // -----------------------------
-  const numKey =
-    numerology && numerology.lifePath
-      ? `Your Life Path ${numerology.lifePath} and current Personal Year ${numerology.personalYear} indicate timing influences around this situation.`
-      : "";
-
-  // -----------------------------
-  // Palmistry signals
-  // -----------------------------
-  const palmKey =
-    palmistry && palmistry.features
-      ? `Your palm lines reflect inner tendencies influencing this matter — especially the ${palmistry.features.heartLine !== "Unknown"
-          ? "heart line showing emotional depth"
-          : "head line showing internal clarity"
-        }.`
-      : "";
-
-  // -----------------------------
-  // FINAL ANSWER (short, direct)
-  // -----------------------------
-  return (
-    `In response to your question — "${question}" — ${base}. ` +
-    `${astroKey ? astroKey + " " : ""}` +
-    `${numKey ? numKey + " " : ""}` +
-    `${palmKey ? palmKey + " " : ""}` +
-    `Overall, the combined indicators suggest meaningful movement and clearer progress forming around this matter.`
-  ).trim();
+  return `
+Your question — "${question}" — connects strongly to themes of ${readableIntent}.
+Your current numerology cycle and astrological patterns both show that clarity and
+forward movement are forming. You are entering a period where decisions become easier,
+inner direction strengthens, and external conditions begin aligning in your favor.
+  `.trim();
 }
 
-
-// ==========================================================
-// ASTROLOGY SECTION
-// ==========================================================
-function generateAstrologyInterpretation({ question, intent, astrology }) {
+// ===============================================================
+function generateAstrologicalInterpretation({ question, intent, astrology }) {
   return `
-Your astrological configuration gives significant insight into your question about ${intent}.
+Astrologically, the energy around ${intent} connects deeply with your core chart patterns.
 
-Key placements:
-• Sun: ${astrology?.sun}
-• Moon: ${astrology?.moon}
-• Rising: ${astrology?.rising}
+• Sun: ${astrology?.sun || "N/A"}
+• Moon: ${astrology?.moon || "N/A"}
+• Rising: ${astrology?.rising || "N/A"}
 
-These highlight your emotional drivers, identity path, and how life events align with your question: "${question}".
+These placements describe the motivations and emotional tone behind your question:
+"${question}". They highlight how internal drives and emotional needs shape your
+experience and upcoming developments.
   `;
 }
 
-// ==========================================================
-// NUMEROLOGY SECTION
-// ==========================================================
-function generateNumerologyInterpretation({ question, intent, numerology }) {
+// ===============================================================
+function generateNumerologicalInterpretation({ question, intent, numerology }) {
   return `
-Numerology reveals the timing + personal cycles influencing your question.
+Numerologically, you are moving through a ${numerology?.personalYear} Personal Year,
+with emphasis on ${intent}. Your Life Path number (${numerology?.lifePath}) adds deeper
+context to the lessons unfolding at this stage.
 
-• Life Path ${numerology?.lifePath}: ${numerology?.lifePathMeaning}
-• Personal Year ${numerology?.personalYear}: ${numerology?.personalYearMeaning}
+• Life Path: ${numerology?.lifePath} — ${numerology?.lifePathMeaning}
+• Personal Year: ${numerology?.personalYear} — ${numerology?.personalYearMeaning}
 
-This cycle influences how events unfold around "${question}" in the domain of ${intent}.
+These influences shape how you interpret and respond to your question:
+"${question}". Timing strongly supports growth, alignment, and forward momentum.
   `;
 }
 
-// ==========================================================
-// PALMISTRY SECTION
-// ==========================================================
+// ===============================================================
 function generatePalmistryInterpretation({ question, intent, palmistry }) {
   return `
-Your palm reveals deeper subconscious patterns shaping this area.
+Your palm shows patterns that relate strongly to ${intent}:
 
 • Heart Line: ${palmistry?.features?.heartLine}
 • Head Line: ${palmistry?.features?.headLine}
 • Life Line: ${palmistry?.features?.lifeLine}
 • Fate Line: ${palmistry?.features?.fateLine}
 
-These reflect emotional, mental, and energetic themes connected to your question: "${question}".
+These features highlight emotional tendencies, decision-making patterns, life strength,
+and direction — all directly influencing your concerns around "${question}".
   `;
 }
 
-// ==========================================================
-// COMBINED SYNTHESIS
-// ==========================================================
+// ===============================================================
 function generateCombinedSynthesis({
   question,
   intent,
@@ -163,45 +135,44 @@ function generateCombinedSynthesis({
   palmistry,
 }) {
   return `
-Astrology shows **why** this area matters.
-Numerology shows **when** movement occurs.
-Palmistry shows **how** your personal patterns shape the path forward.
+When astrology, numerology, and palmistry are combined, a clear message emerges:
 
-Together they reveal a unified message regarding: "${question}"
-The direction of ${intent} is aligning toward clarity and resolution.
+Your chart shows the underlying motivations and energy patterns.
+Your numerology cycle reveals the timing and growth themes.
+Your palmistry features reflect your internal direction and subconscious patterns.
+
+Together, these systems indicate that your path regarding ${intent} is aligning toward
+greater clarity and resolution. Your question — "${question}" — is part of a deeper shift
+that is becoming more defined and actionable.
   `;
 }
 
-// ==========================================================
-// TIMELINE (ASTROLOGY + NUMEROLOGY)
-// ==========================================================
+// ===============================================================
 function generateTimeline({ intent, astrology, numerology }) {
   return `
-Your strongest momentum appears in:
-• Personal Year ${numerology?.personalYear}
-• Months ${numerology?.personalMonthRange}
+The strongest movement in this area is expected during your Personal Year ${
+    numerology?.personalYear
+  }, especially months ${numerology?.personalMonthRange || "N/A"}.
 
-Astrological support:
-• ${astrology?.transit1}
-• ${astrology?.transit2}
+Astrological transits relevant to ${intent} include:
+• ${astrology?.transit1 || "A supportive major transit approaching"}
+• ${astrology?.transit2 || "A stabilizing secondary alignment"}
 
-This is the window where progress in ${intent} accelerates.
+Together, these mark a window of progress, insight, and momentum.
   `;
 }
 
-// ==========================================================
-// RECOMMENDATIONS
-// ==========================================================
+// ===============================================================
 function generateRecommendations({ intent, astrology, numerology, palmistry }) {
   return `
-To align with these energies:
+Recommended actions to make the most of current cycles:
 
-1. Lean into the strengths shown in your Sun and Rising signs.
-2. Follow the rhythm of your Personal Year cycle.
-3. Notice emotional cues from your Moon placement.
-4. Take action during beneficial transit periods.
-5. Align decisions with the intuitive indicators shown in your palm.
+1. Lean into strengths shown in your Sun + Rising signs.
+2. Align key decisions with your Personal Year numerology themes.
+3. Follow emotional cues reflected in your Moon placement.
+4. Take action during favourable transit periods.
+5. Trust intuitive patterns shown in your palm features.
 
-These steps help you manifest the best outcome in the domain of ${intent}.
+These steps help you move strongly forward in matters related to ${intent}.
   `;
 }
