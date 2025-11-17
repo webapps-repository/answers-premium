@@ -56,7 +56,7 @@ Return ONLY the following JSON structure, nothing else:
 {
   "type": "personal" | "technical",
   "intent": "love" | "career" | "money" | "health" | "spiritual" | "personal_growth" | "life_direction" | "technical" | "general",
-  "confidence": 0.0 to 1.0,
+  "confidence": "0.0 to 1.0",
   "tone": "emotional" | "neutral" | "urgent" | "curious"
 }
 
