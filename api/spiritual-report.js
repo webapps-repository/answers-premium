@@ -1,6 +1,4 @@
 // /api/spiritual-report.js
-// Main endpoint for handling both personal and technical spiritual reports
-
 import formidable from "formidable";
 import fs from "fs";
 import path from "path";
@@ -12,44 +10,30 @@ import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
 import { sendEmail } from "./utils/send-email.js";
 
-// Enable Vercel to parse multipart form uploads
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false }
 };
 
-// -------------------------------------------------------------
-// Helpers
-// -------------------------------------------------------------
+// CORS helper
 function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// -------------------------------------------------------------
-// MAIN HANDLER
-// -------------------------------------------------------------
 export default async function handler(req, res) {
   allowCors(res);
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
     return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
 
   try {
-    // -------------------------------------------------------------
-    // 1. Parse FormData
-    // -------------------------------------------------------------
+    // Parse form
     const form = formidable({
       multiples: false,
       keepExtensions: true,
-      maxFileSize: 8 * 1024 * 1024, // 8 MB
+      maxFileSize: 8 * 1024 * 1024,
       allowEmptyFiles: true
     });
 
@@ -71,42 +55,30 @@ export default async function handler(req, res) {
       recaptchaToken
     } = fields;
 
-    // -------------------------------------------------------------
-    // 2. Validate required fields
-    // -------------------------------------------------------------
     if (!question) {
       return res.status(400).json({ ok: false, error: "Question is required." });
     }
 
-    // -------------------------------------------------------------
-    // 3. Verify reCAPTCHA
-    // -------------------------------------------------------------
+    // CAPTCHA
     const captcha = await verifyRecaptcha(recaptchaToken);
     if (!captcha.ok) {
       return res.status(403).json({
-        ok: false,
-        error: "reCAPTCHA failed",
-        detail: captcha.error
+        ok: false, error: "reCAPTCHA failed", detail: captcha.error
       });
     }
 
-    // -------------------------------------------------------------
-    // 4. Palmistry image (optional)
-    // -------------------------------------------------------------
+    // Palmistry
     const palmImagePath = files?.palmImage?.filepath || null;
     const palmistryData = await analyzePalmImage(palmImagePath);
 
-    // -------------------------------------------------------------
-    // 5. Classification: detect intent (love, money, career, etc.)
-    // -------------------------------------------------------------
+    // Classification
     const classification = await classifyQuestion(question);
 
-    // User override:
-    const personalMode = String(isPersonal) === "yes";
+    // PERSONAL MODE detection fix
+    const personalMode =
+      isPersonal === "on" || isPersonal === "true" || isPersonal === true;
 
-    // -------------------------------------------------------------
-    // 6. Generate Insights (Personal or Technical)
-    // -------------------------------------------------------------
+    // Insights
     const insights = await generateInsights({
       question,
       isPersonal: personalMode,
@@ -127,9 +99,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // -------------------------------------------------------------
-    // 7. PERSONAL MODE → CREATE PDF + SEND EMAIL
-    // -------------------------------------------------------------
+    // PERSONAL MODE → PDF + Email
     if (personalMode) {
       const pdfBuffer = await generatePDF({
         mode: "personal",
@@ -144,20 +114,17 @@ export default async function handler(req, res) {
         palmistry: insights.palmistry
       });
 
-      // Send email with PDF attached
       const emailResult = await sendEmail({
         to: email,
         subject: "Your Personal Spiritual Report",
         html: `<p>Your detailed spiritual report is attached.</p>`,
         attachments: [
-          {
-            filename: "spiritual-report.pdf",
-            content: pdfBuffer
-          }
+          { filename: "spiritual-report.pdf", content: pdfBuffer }
         ]
       });
 
-      if (!emailResult.ok) {
+      // FIX: check .success instead of .ok
+      if (!emailResult.success) {
         return res.status(500).json({
           ok: false,
           error: "Email failed",
@@ -165,7 +132,6 @@ export default async function handler(req, res) {
         });
       }
 
-      // Respond with summary + confirmation
       return res.status(200).json({
         ok: true,
         mode: "personal",
@@ -175,9 +141,7 @@ export default async function handler(req, res) {
       });
     }
 
-    // -------------------------------------------------------------
-    // 8. TECHNICAL MODE → NO PDF YET
-    // -------------------------------------------------------------
+    // TECHNICAL MODE → no PDF
     return res.status(200).json({
       ok: true,
       mode: "technical",
@@ -191,7 +155,6 @@ export default async function handler(req, res) {
 
   } catch (err) {
     console.error("Server error:", err);
-
     return res.status(500).json({
       ok: false,
       error: "Server error",
