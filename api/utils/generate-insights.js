@@ -1,133 +1,69 @@
 // /api/utils/generate-insights.js
-// -----------------------------------------------------------
-// Unified insight generator for:
-//  • Personal questions (Astrology + Numerology + Palmistry)
-//  • Technical questions
-// -----------------------------------------------------------
+// Unified personal + technical insights generator
 
-import OpenAI from "openai";
 import { synthesizeTriad } from "./synthesize-triad.js";
 
-// ==========================================================
-// NUMEROLOGY FUNCTIONS
-// ==========================================================
+// --- Numerology Helpers -------------------------------------
+
 function reduceNum(n) {
-  while (n > 9 && ![11, 22, 33].includes(n)) {
-    n = n.toString().split("").reduce((a, b) => a + Number(b), 0);
+  while (n > 9 && n !== 11 && n !== 22 && n !== 33) {
+    n = n
+      .toString()
+      .split("")
+      .reduce((a, b) => a + Number(b), 0);
   }
   return n;
 }
 
-function computeLifePath(dateStr) {
-  if (!dateStr) return null;
+function calculateLifePath(dateStr) {
   const digits = dateStr.replace(/\D/g, "").split("").map(Number);
   let sum = digits.reduce((a, b) => a + b, 0);
   return reduceNum(sum);
 }
 
-function computePersonalYear(dob) {
+function calculatePersonalYear(dob) {
   const now = new Date();
   const sum =
-    dob.getDate() + (dob.getMonth() + 1) + now.getFullYear();
+    dob.getDate() +
+    (dob.getMonth() + 1) +
+    now.getFullYear();
   return reduceNum(sum);
 }
 
-function computePersonalMonth(dob) {
+function calculatePersonalMonth(dob) {
   const now = new Date();
-  const sum = (dob.getMonth() + 1) + (now.getMonth() + 1);
+  const sum =
+    (dob.getMonth() + 1) +
+    (now.getMonth() + 1);
   return reduceNum(sum);
 }
 
-// Meanings
-const lifePathMeaning = {
-  1: "Independence, leadership, self-direction.",
-  2: "Harmony, partnership, intuition.",
-  3: "Creativity, expression, optimism.",
-  4: "Stability, discipline, groundwork.",
-  5: "Change, adventure, transformation.",
-  6: "Responsibility, love, family.",
-  7: "Spiritual depth, analysis, inner wisdom.",
-  8: "Power, ambition, material mastery.",
-  9: "Completion, giving, humanitarian energy.",
-  11: "Spiritual illumination and awakening.",
-  22: "Master builder energy, manifestation.",
+const lifePathMeanings = {
+  1: "Leadership, independence, originality.",
+  2: "Partnership, intuition, sensitivity.",
+  3: "Creativity, joy, communication.",
+  4: "Stability, discipline, structure.",
+  5: "Change, adventure, freedom.",
+  6: "Nurturing, harmony, responsibility.",
+  7: "Spirituality, introspection, wisdom.",
+  8: "Success, power, manifestation.",
+  9: "Completion, compassion, purpose.",
+  11: "Spiritual awakening, intuition.",
+  22: "Master builder, major life achievements."
 };
 
-const personalYearMeaning = {
-  1: "New beginnings and identity shifts.",
-  2: "Relationships, emotions, intuition.",
-  3: "Expression, social activity, creativity.",
-  4: "Structure, discipline, long-term planning.",
-  5: "Freedom, breakthroughs, movement.",
-  6: "Family, responsibility, love.",
-  7: "Spiritual insight, introspection.",
-  8: "Success and achievement.",
-  9: "Endings, transformation, closure.",
-};
-
-// Compute Numerology Object
-function computeNumerology(fullName, birthDate) {
-  if (!birthDate) return null;
-
-  const dob = new Date(birthDate);
-
-  const lifePath = computeLifePath(birthDate);
-  const personalYear = computePersonalYear(dob);
-  const personalMonth = computePersonalMonth(dob);
-
+// --- Astrology Mock ------------------------------------------
+function computeAstrologyMock(birthDate, birthTime, birthPlace) {
   return {
-    lifePath,
-    personalYear,
-    personalMonth,
-    personalMonthRange: `${personalMonth}-${personalMonth + 2}`,
-    lifePathMeaning: lifePathMeaning[lifePath] || "Meaning unavailable.",
-    personalYearMeaning:
-      personalYearMeaning[personalYear] || "Meaning unavailable.",
+    sun: "Aries",
+    moon: "Leo",
+    rising: "Sagittarius",
+    transit1: "Sun trine Jupiter",
+    transit2: "Moon conjunct Venus"
   };
 }
 
-// ==========================================================
-// ASTROLOGY PLACEHOLDER (replace later with true API)
-// ==========================================================
-function computeAstrologyMock(date, time, place) {
-  return {
-    sun: "Aries — assertive new beginnings",
-    moon: "Cancer — emotional depth",
-    rising: "Libra — balance + harmony",
-    transit1: "Jupiter trine Sun",
-    transit2: "Venus conjunct Moon",
-  };
-}
-
-// ==========================================================
-// TECHNICAL INSIGHTS
-// ==========================================================
-async function generateTechnicalInsights(question) {
-  return {
-    ok: true,
-    mode: "technical",
-    question,
-    shortAnswer: `Here is your core technical answer: ${question}`,
-    keyPoints: [
-      "The logic is evaluated using deterministic reasoning.",
-      "If logs or code are added, deeper debugging becomes possible.",
-      "The system focuses on clarity and actionable steps.",
-    ],
-    explanation: `
-This explanation elaborates on the logical structure behind your technical question.
-If you provide more code, stack traces, or logs, this system can generate extremely deep debugging insights.
-    `,
-    recommendations: `
-• Add logs for deeper insight  
-• Include failed inputs or expected outputs  
-• Provide stack traces if possible  
-    `,
-  };
-}
-
-// ==========================================================
-// EXPORT: generateInsights
-// ==========================================================
+// --- MAIN EXPORT ----------------------------------------------
 export async function generateInsights({
   question,
   isPersonal,
@@ -137,56 +73,84 @@ export async function generateInsights({
   birthPlace,
   classify,
   palmistryData,
-  technicalMode = false,
+  technicalMode
 }) {
   try {
-    // -----------------------------------------------------
-    // TECHNICAL MODE
-    // -----------------------------------------------------
+    // --- Technical mode ----------------------------------------
     if (technicalMode) {
-      return await generateTechnicalInsights(question);
+      return {
+        ok: true,
+        mode: "technical",
+        question,
+        shortAnswer: `Here is your core technical answer: ${question}`,
+        keyPoints: [
+          "This explanation is structured and logic-driven.",
+          "You can attach logs or code for deeper analysis.",
+          "Technical PDF available via the full report button."
+        ],
+        explanation: `
+Your technical question: "${question}"
+was processed with structured reasoning.
+        `,
+        recommendations: `
+• Provide more details for a deeper technical analysis.
+• Attach logs or error output if relevant.
+        `
+      };
     }
 
-    // -----------------------------------------------------
-    // PERSONAL MODE
-    // -----------------------------------------------------
-    const numerology = computeNumerology(fullName, birthDate);
+    // --- Personal mode -----------------------------------------
+    const numerology =
+      birthDate
+        ? (() => {
+            const dob = new Date(birthDate);
+            const lp = calculateLifePath(birthDate);
+            const py = calculatePersonalYear(dob);
+            const pm = calculatePersonalMonth(dob);
+            return {
+              lifePath: lp,
+              personalYear: py,
+              personalMonth: pm,
+              personalMonthRange: `${pm}-${pm + 2}`,
+              lifePathMeaning: lifePathMeanings[lp] || "",
+              personalYearMeaning: lifePathMeanings[py] || ""
+            };
+          })()
+        : null;
+
     const astrology = computeAstrologyMock(birthDate, birthTime, birthPlace);
-    const palmistry = palmistryData;
 
-    const intent = classify?.intent || "general";
-
-    // Build total spiritual synthesis
     const triad = synthesizeTriad({
       question,
-      intent,
+      intent: classify.intent || "general",
       astrology,
       numerology,
-      palmistry,
+      palmistry: palmistryData
     });
 
     return {
       ok: true,
       mode: "personal",
       question,
-      intent,
       shortAnswer: triad.shortAnswer,
       astrology,
       numerology,
-      palmistry,
+      palmistry: palmistryData,
       interpretations: {
         astrology: triad.astroInterpretation,
         numerology: triad.numerologyInterpretation,
         palmistry: triad.palmInterpretation,
         combined: triad.combined,
         timeline: triad.timeline,
-        recommendations: triad.recommendations,
-      },
+        recommendations: triad.recommendations
+      }
     };
+
   } catch (err) {
+    console.error("INSIGHTS ERROR:", err);
     return {
       ok: false,
-      error: err.message || "Insight generation failure",
+      error: err.message
     };
   }
 }
