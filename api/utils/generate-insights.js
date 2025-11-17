@@ -187,3 +187,4 @@ This explanation can include debugging steps, analysis, or conceptual breakdowns
     `,
     recommendations: `
 • Provide logs or stack trace
+}
