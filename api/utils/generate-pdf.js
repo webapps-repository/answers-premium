@@ -11,97 +11,71 @@ export function generatePDF({
   insights,
   astrology,
   numerology,
-  palmistry,
+  palmistry
 }) {
   return new Promise((resolve, reject) => {
     try {
       const doc = new PDFDocument({ size: "A4", margin: 40 });
 
       const chunks = [];
-      doc.on("data", (d) => chunks.push(d));
+      doc.on("data", d => chunks.push(d));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
 
-      // Header
-      doc.fontSize(20).text("Melodies Web — Detailed Report", {
-        align: "center",
-      }).moveDown(2);
+      doc.fontSize(20)
+        .text("Melodies Web — Detailed Report", { align: "center" })
+        .moveDown();
 
-      // Question
-      doc.fontSize(12).text(`Your Question: "${question}"`).moveDown();
+      doc.fontSize(12)
+        .text(`Your Question: "${question}"`)
+        .moveDown();
 
-      // Personal data
       if (mode === "personal") {
         doc.text(`Name: ${fullName || "N/A"}`);
         doc.text(`Birth Date: ${birthDate || "N/A"}`);
         doc.text(`Birth Time: ${birthTime || "N/A"}`);
-        doc.text(`Birth Place: ${birthPlace || "N/A"}`).moveDown();
+        doc.text(`Birth Place: ${birthPlace || "N/A"}`);
+        doc.moveDown();
       }
 
-      // Short Answer
-      createHeader(doc, "Summary Answer");
-      doc.fontSize(11).text(insights.shortAnswer).moveDown();
+      // summary
+      doc.fontSize(14)
+        .text("Summary", { underline: true })
+        .moveDown(0.5);
 
-      // ----------------------------------------------------
-      // PERSONAL MODE CONTENT
-      // ----------------------------------------------------
+      doc.fontSize(11)
+        .text(insights.shortAnswer)
+        .moveDown();
+
+      // personal sections
       if (mode === "personal") {
-        createHeader(doc, "Astrological Interpretation");
-        doc.text(insights.interpretations.astrology).moveDown();
-        buildTable(doc, "Astrological Data", astrology);
-
-        createHeader(doc, "Numerological Interpretation");
-        doc.text(insights.interpretations.numerology).moveDown();
-        buildTable(doc, "Numerology Data", numerology);
-
-        createHeader(doc, "Palmistry Interpretation");
-        doc.text(insights.interpretations.palmistry).moveDown();
-        buildTable(doc, "Palmistry Features", palmistry?.features);
-
-        createHeader(doc, "Combined Synthesis");
-        doc.text(insights.interpretations.combined).moveDown();
-
-        createHeader(doc, "Timeline & Forecast");
-        doc.text(insights.interpretations.timeline).moveDown();
-
-        createHeader(doc, "Recommendations");
-        doc.text(insights.interpretations.recommendations).moveDown();
+        section(doc, "Astrology Interpretation", insights.interpretations.astrology);
+        section(doc, "Numerology Interpretation", insights.interpretations.numerology);
+        section(doc, "Palmistry Interpretation", insights.interpretations.palmistry);
+        section(doc, "Combined Synthesis", insights.interpretations.combined);
+        section(doc, "Timeline & Forecast", insights.interpretations.timeline);
+        section(doc, "Recommendations", insights.interpretations.recommendations);
       }
 
-      // ----------------------------------------------------
-      // TECHNICAL MODE CONTENT
-      // ----------------------------------------------------
+      // technical sections
       if (mode === "technical") {
-        createHeader(doc, "Key Points");
-        doc.text("• " + insights.keyPoints.join("\n• ")).moveDown();
-
-        createHeader(doc, "Detailed Explanation");
-        doc.text(insights.explanation).moveDown();
-
-        createHeader(doc, "Recommendations");
-        doc.text(insights.recommendations).moveDown();
+        section(doc, "Key Points", "• " + insights.keyPoints.join("\n• "));
+        section(doc, "Explanation", insights.explanation);
+        section(doc, "Recommendations", insights.recommendations);
       }
 
       doc.end();
+
     } catch (err) {
       reject(err);
     }
   });
 }
 
-// ------------------------------------------------------------
-// HELPERS
-// ------------------------------------------------------------
-function createHeader(doc, title) {
-  doc.moveDown().fontSize(14).fillColor("#222")
+function section(doc, title, content) {
+  doc.moveDown()
+    .fontSize(14)
     .text(title, { underline: true })
     .moveDown(0.5);
-}
 
-function buildTable(doc, title, obj) {
-  if (!obj) return;
-  doc.fontSize(11).fillColor("#000").text(`${title}:`);
-  Object.entries(obj).forEach(([k, v]) => {
-    doc.text(`${k}: ${v}`);
-  });
-  doc.moveDown();
+  doc.fontSize(11).text(content).moveDown();
 }
