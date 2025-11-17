@@ -1,94 +1,184 @@
-<style>
-/* (STYLE SECTION UNCHANGED – omitted for brevity) */
-</style>
+{% layout none %}
 
-<div class="spiritual-container">
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Your Question</title>
+
+  <style>
+    /* CLEAN CENTERED DESIGN */
+    body {
+      font-family: system-ui, sans-serif;
+      margin: 0; padding: 0;
+      background: #fff;
+    }
+
+    #spiritual-wrapper {
+      max-width: 520px;
+      margin: 0 auto;
+      padding: 20px;
+      text-align: left;
+    }
+
+    h2 {
+      text-align: center;
+      margin-bottom: 16px;
+    }
+
+    .field {
+      margin-bottom: 14px;
+      width: 100%;
+    }
+    
+    .field label {
+      font-weight: 600;
+      margin-bottom: 6px;
+      display: block;
+    }
+
+    .field input, .field textarea {
+      width: 100%;
+      padding: 10px;
+      border-radius: 6px;
+      border: 1px solid #bbb;
+      font-size: 1rem;
+      box-sizing: border-box;
+    }
+
+    #personal-fields { display: none; }
+
+    .btn {
+      width: 100%;
+      padding: 14px;
+      background: #6c63ff;
+      color: white;
+      font-weight: 600;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      margin-top: 10px;
+      font-size: 1.05rem;
+    }
+
+    #detailed-btn {
+      background: #4caf50;
+      display: none;
+    }
+
+    #summary-container {
+      margin-top: 20px;
+      display: none;
+    }
+
+    .summary-box {
+      background: #f3f1ff;
+      padding: 12px;
+      border-radius: 10px;
+    }
+
+    /* EMAIL MODAL */
+    #email-modal-backdrop {
+      position: fixed; left: 0; top: 0;
+      width: 100%; height: 100%;
+      background: rgba(0,0,0,0.55);
+      z-index: 999999999;
+      display: none;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #email-modal {
+      background: white;
+      width: 90%;
+      max-width: 420px;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+    }
+
+    .modal-btn {
+      margin-top: 14px;
+      padding: 12px;
+      width: 100%;
+      border-radius: 8px;
+      border: none;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+
+    .modal-send { background:#4caf50;color:white; }
+    .modal-cancel { background:#ddd;color:black; }
+
+    .spinner { display:none;text-align:center;margin-top:8px;color:#444;font-size:0.95rem; }
+  </style>
+
+</head>
+<body>
+
+<div id="spiritual-wrapper">
+
   <h2>Your Question</h2>
 
-  <form id="spiritual-form" class="spiritual-form" enctype="multipart/form-data">
-    <!-- PERSONAL QUESTION TOGGLE -->
-    <label class="personal-toggle">
-      <input type="checkbox" id="isPersonal" name="isPersonal" />
-      <span>Is this a personal question? (enter personal information)</span>
-    </label>
+  <form id="spiritual-form" enctype="multipart/form-data">
 
-    <!-- QUESTION -->
-    <label>Your Question (max 25 words)</label>
-    <textarea id="question" name="question" maxlength="200"
-              placeholder="Example: Should I change jobs next year?"></textarea>
+    <div class="field" style="display:flex; gap:8px; align-items:center;">
+      <input type="checkbox" id="isPersonal" name="isPersonal" style="width:20px;height:20px;">
+      <label for="isPersonal" style="margin:0;font-weight:500;">This is a personal question</label>
+    </div>
 
-    <!-- PERSONAL FIELDS -->
+    <div class="field">
+      <label>Your Question</label>
+      <textarea id="question" name="question" maxlength="200"></textarea>
+    </div>
+
     <div id="personal-fields">
-      <label>Email</label>
-      <input type="email" id="email" name="email" />
-
-      <label>Full Name</label>
-      <input type="text" id="fullName" name="fullName" />
-
-      <label>Date of Birth (YYYY-MM-DD)</label>
-      <input type="date" id="birthDate" name="birthDate" />
-
-      <label>Time of Birth (HH:MM)</label>
-      <input type="time" id="birthTime" name="birthTime" />
-
-      <label>City of Birth</label>
-      <input type="text" id="birthCity" name="" />
-
-      <label>State / Region</label>
-      <input type="text" id="birthState" name="" />
-
-      <label>Country of Birth</label>
-      <input type="text" id="birthCountry" name="" />
-
-      <label>Upload Right Palm (optional)</label>
-      <input type="file" name="palmImage" accept="image/*" />
+      <div class="field"><label>Email</label><input type="email" id="email" name="email"></div>
+      <div class="field"><label>Full Name</label><input type="text" id="fullName" name="fullName"></div>
+      <div class="field"><label>Date of Birth</label><input type="date" id="birthDate" name="birthDate"></div>
+      <div class="field"><label>Time of Birth</label><input type="time" id="birthTime" name="birthTime"></div>
+      <div class="field"><label>City</label><input type="text" id="birthCity"></div>
+      <div class="field"><label>State</label><input type="text" id="birthState"></div>
+      <div class="field"><label>Country</label><input type="text" id="birthCountry"></div>
+      <div class="field"><label>Palm Photo</label><input type="file" name="palmImage"></div>
     </div>
 
-    <!-- RECAPTCHA -->
-    <div id="recaptcha-box" style="margin: 12px 0;"></div>
+    <div id="recaptcha-box" class="field"></div>
 
-    <button type="submit" class="btn-primary">Get Answer</button>
+    <button class="btn" type="submit">Get Answer</button>
+    <div class="spinner" id="spinner">Processing…</div>
 
-    <!-- PROGRESS -->
-    <div class="progress-wrapper">
-      <div class="progress-bar"><div class="progress-bar-inner" id="progress-inner"></div></div>
-      <div class="spinner" id="spinner">Processing… please wait ⏳</div>
-    </div>
   </form>
 
   <div id="summary-container">
     <h3>Short Answer</h3>
-    <div class="summary-box" id="answer-summary">—</div>
-
-    <button id="detailed-btn">Get Detailed Report (Free)</button>
+    <div class="summary-box" id="answer-summary"></div>
+    <button id="detailed-btn" class="btn">Get Full PDF Report</button>
   </div>
+
 </div>
 
-
-<!-- ===== MODAL ===== -->
+<!-- Email Modal -->
 <div id="email-modal-backdrop">
   <div id="email-modal">
-    <h3>Enter your email to receive the full PDF</h3>
-    <input type="email" id="modal-email" placeholder="you@example.com" />
-    <button id="modal-send" class="modal-btn modal-send">Send Report</button>
-    <button id="modal-cancel" class="modal-btn modal-cancel">Cancel</button>
+    <h3>Enter your email</h3>
+    <input type="email" id="modal-email" placeholder="you@example.com"
+           style="width:100%;padding:10px;border-radius:8px;border:1px solid #ccc;">
+    <button class="modal-btn modal-send" id="modal-send">Send</button>
+    <button class="modal-btn modal-cancel" id="modal-cancel">Cancel</button>
   </div>
 </div>
 
 <script src="https://www.google.com/recaptcha/api.js?onload=onLoadRecaptcha&render=explicit" async defer></script>
-
 <script>
-/* ============================================================
-   CONFIG
-============================================================ */
+/* ========================= CONFIG ========================= */
 const API_SUMMARY = "https://answers-rust.vercel.app/api/spiritual-report";
-const API_PDF = "https://answers-rust.vercel.app/api/detailed-report";
+const API_PDF     = "https://answers-rust.vercel.app/api/detailed-report";
 
 let recaptchaWidgetId = null;
 
-/* ============================================================
-   RECAPTCHA LOADER
-============================================================ */
+/* ========================= RECAPTCHA ========================= */
 function onLoadRecaptcha() {
   recaptchaWidgetId = grecaptcha.render("recaptcha-box", {
     sitekey: "6LdAOgYsAAAAAFgNlxLkahtIAbZc4XcIJt2hfLsj",
@@ -96,107 +186,69 @@ function onLoadRecaptcha() {
   });
 }
 
-/* ============================================================
-   DOM REFERENCES
-============================================================ */
-const form = document.getElementById("spiritual-form");
+/* ========================= DOM REFERENCES ========================= */
 const personalCheckbox = document.getElementById("isPersonal");
-const personalFields = document.getElementById("personal-fields");
+const personalFields   = document.getElementById("personal-fields");
 
 const summaryContainer = document.getElementById("summary-container");
-const answerSummary = document.getElementById("answer-summary");
-const detailedBtn = document.getElementById("detailed-btn");
+const answerSummary    = document.getElementById("answer-summary");
+const detailedBtn      = document.getElementById("detailed-btn");
 
-const spinner = document.getElementById("spinner");
-const progressInner = document.getElementById("progress-inner");
+const spinner          = document.getElementById("spinner");
 
-const modalBackdrop = document.getElementById("email-modal-backdrop");
-const modalEmail = document.getElementById("modal-email");
-const modalSend = document.getElementById("modal-send");
-const modalCancel = document.getElementById("modal-cancel");
+const modalBackdrop    = document.getElementById("email-modal-backdrop");
+const modalEmail       = document.getElementById("modal-email");
+const modalSend        = document.getElementById("modal-send");
+const modalCancel      = document.getElementById("modal-cancel");
 
 /* ============================================================
-   PERSONAL FIELDS SLIDE DOWN
+   PERSONAL TOGGLE — show/hide fields
 ============================================================ */
 personalCheckbox.addEventListener("change", () => {
-  if (personalCheckbox.checked) {
-    personalFields.style.display = "block";
-    personalFields.style.maxHeight = personalFields.scrollHeight + "px";
-  } else {
-    personalFields.style.maxHeight = "0px";
-    setTimeout(() => { personalFields.style.display = "none"; }, 300);
-  }
+  personalFields.style.display = personalCheckbox.checked ? "block" : "none";
 });
 
 /* ============================================================
-   PROGRESS UTILS
+   FORM SUBMIT → GET SHORT ANSWER
 ============================================================ */
-function animateProgress() {
-  progressInner.style.width = "0%";
-  setTimeout(() => progressInner.style.width = "40%", 100);
-  setTimeout(() => progressInner.style.width = "80%", 600);
-}
-function finishProgress() {
-  progressInner.style.width = "100%";
-  setTimeout(() => progressInner.style.width = "0%", 1500);
-}
-
-/* ============================================================
-   SUBMIT FORM → GET SHORT ANSWER
-============================================================ */
-form.addEventListener("submit", async (e) => {
+document.getElementById("spiritual-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
   const token = grecaptcha.getResponse(recaptchaWidgetId);
-  if (!token) {
-    alert("Please complete the reCAPTCHA.");
-    return;
-  }
+  if (!token) return alert("Please complete the reCAPTCHA.");
 
   spinner.style.display = "block";
-  animateProgress();
 
-  const fd = new FormData(form);
+  const fd = new FormData(e.target);
   fd.append("recaptchaToken", token);
 
-  // Build birthPlace combined string
-  const city = document.getElementById("birthCity").value.trim();
-  const state = document.getElementById("birthState").value.trim();
-  const country = document.getElementById("birthCountry").value.trim();
-  if (city || state || country) {
-    fd.append("birthPlace", `${city}, ${state}, ${country}`);
-  }
+  // Build birthPlace into one string
+  const birthPlace = [
+    document.getElementById("birthCity").value.trim(),
+    document.getElementById("birthState").value.trim(),
+    document.getElementById("birthCountry").value.trim()
+  ].filter(Boolean).join(", ");
+
+  if (birthPlace) fd.append("birthPlace", birthPlace);
 
   let result;
-
   try {
     const raw = await fetch(API_SUMMARY, { method: "POST", body: fd });
-    const text = await raw.text();
-    result = JSON.parse(text);
+    result = await raw.json();
   } catch (err) {
     spinner.style.display = "none";
-    finishProgress();
-    alert("Server error: " + err.message);
-    return;
+    return alert("Server error: " + err.message);
   }
 
   spinner.style.display = "none";
-  finishProgress();
 
-  /* Backend now returns: result.shortAnswer */
-  let answer = result.shortAnswer || "No answer received.";
+  /* Short answer */
+  answerSummary.textContent = result.shortAnswer || "No answer.";
 
-  if (
-    answer.toLowerCase().includes("not permitted") ||
-    answer.toLowerCase().includes("policy")
-  ) {
-    answer = "⚠️ Censored by OpenAI — this question cannot be answered.";
-  }
-
-  answerSummary.textContent = answer;
+  /* Show container */
   summaryContainer.style.display = "block";
 
-  /* Hide detailed button if personal report emailed */
+  /* If personal → PDF already emailed */
   if (result.pdfEmailed === true) {
     detailedBtn.style.display = "none";
   } else {
@@ -207,59 +259,63 @@ form.addEventListener("submit", async (e) => {
 });
 
 /* ============================================================
-   DETAILED REPORT BUTTON
+   FULL PDF REQUEST BUTTON
 ============================================================ */
 detailedBtn.addEventListener("click", () => {
-  const isPersonal = personalCheckbox.checked;
-  const emailField = document.getElementById("email")?.value.trim();
+  const personalMode = personalCheckbox.checked;
+  const existingEmail = document.getElementById("email").value.trim();
 
-  // PERSONAL MODE → already emailed automatically
-  if (isPersonal) {
-    alert("Your full personal report has already been emailed to you.");
-    return;
+  if (personalMode) {
+    return alert("Your full personal report has already been emailed to the email you provided.");
   }
 
-  modalBackdrop.style.display = "flex";
+  if (!existingEmail) {
+    modalBackdrop.style.display = "flex"; // ask for email
+  } else {
+    requestPdf(existingEmail);
+  }
 });
 
+/* ============================================================
+   POPUP: SEND PDF
+============================================================ */
 modalCancel.addEventListener("click", () => {
   modalBackdrop.style.display = "none";
 });
 
-/* ============================================================
-   SEND TECHNICAL REPORT EMAIL → /api/detailed-report
-============================================================ */
-modalSend.addEventListener("click", async () => {
+modalSend.addEventListener("click", () => {
   const email = modalEmail.value.trim();
-  if (!email) {
-    alert("Please enter a valid email.");
-    return;
-  }
-
+  if (!email) return alert("Please enter an email.");
   modalBackdrop.style.display = "none";
+  requestPdf(email);
+});
 
-  const body = JSON.stringify({
-    email,
-    question: document.getElementById("question").value.trim()
-  });
+/* ============================================================
+   FUNCTION: SEND TECHNICAL PDF REQUEST
+============================================================ */
+async function requestPdf(email) {
+  const question = document.getElementById("question").value.trim();
 
   try {
     const raw = await fetch(API_PDF, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body
+      body: JSON.stringify({ email, question })
     });
 
     const result = await raw.json();
 
     if (!result.ok) {
-      alert("Failed to send report: " + result.error);
-      return;
+      return alert("Failed to send report: " + (result.error || "Unknown error"));
     }
 
-    alert("Your detailed report has been emailed.");
+    alert("Your detailed report has been emailed!");
+
   } catch (err) {
     alert("Server error: " + err.message);
   }
-});
+}
 </script>
+
+</body>
+</html>
