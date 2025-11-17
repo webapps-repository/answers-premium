@@ -1,10 +1,7 @@
 // /api/spiritual-report.js
-// FULLY FIXED — PERSONAL MODE ALWAYS EMAILS, TECHNICAL MODE DOES NOT,
-// CLASSIFIER NEVER OVERRIDES CHECKBOX, SAFER CORS, CLEANED LOGIC
+// Handles both personal & technical spiritual reports
 
 import formidable from "formidable";
-import fs from "fs";
-
 import { verifyRecaptcha } from "./utils/verify-recaptcha.js";
 import { classifyQuestion } from "./utils/classify-question.js";
 import { analyzePalmImage } from "./utils/analyze-palm.js";
@@ -12,17 +9,13 @@ import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
 import { sendEmailHTML } from "./utils/send-email.js";
 
-export const config = {
-  api: { bodyParser: false },
-};
+export const config = { api: { bodyParser: false } };
 
+// CORS
 function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization"
-  );
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
 export default async function handler(req, res) {
@@ -34,20 +27,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    // ----------------------------------------------------------
-    // Parse form data (multipart)
-    // ----------------------------------------------------------
+    // ------------------------------
+    // Parse FormData
+    // ------------------------------
     const form = formidable({
       keepExtensions: true,
       allowEmptyFiles: true,
-      multiples: false,
-      maxFileSize: 10 * 1024 * 1024,
+      multiples: false
     });
 
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, f, fi) => {
+      form.parse(req, (err, f, fl) => {
         if (err) reject(err);
-        else resolve({ fields: f, files: fi });
+        else resolve({ fields: f, files: fl });
       });
     });
 
@@ -62,47 +54,42 @@ export default async function handler(req, res) {
       recaptchaToken,
     } = fields;
 
-    if (!question) {
-      return res.status(400).json({ ok: false, error: "Question is required" });
-    }
+    if (!question) return res.status(400).json({ ok: false, error: "Question required" });
 
-    // ----------------------------------------------------------
-    // reCAPTCHA check
-    // ----------------------------------------------------------
-    const captcha = await verifyRecaptcha(recaptchaToken);
+    // Normalize isPersonal
+    const personalMode =
+      String(isPersonal) === "true" ||
+      String(isPersonal) === "1" ||
+      String(isPersonal).toLowerCase() === "yes";
+
+    // Normalize recaptcha token
+    const token = Array.isArray(recaptchaToken)
+      ? recaptchaToken[0]
+      : recaptchaToken;
+
+    // ------------------------------
+    // Verify reCAPTCHA
+    // ------------------------------
+    const captcha = await verifyRecaptcha(token);
     if (!captcha.ok) {
-      return res.status(403).json({
-        ok: false,
-        error: "reCAPTCHA verification failed",
-        details: captcha,
-      });
+      return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
     }
 
-    // ----------------------------------------------------------
-    // Palmistry image
-    // ----------------------------------------------------------
+    // ------------------------------
+    // Palmistry
+    // ------------------------------
     const palmImagePath = files?.palmImage?.filepath || null;
     const palmistryData = await analyzePalmImage(palmImagePath);
 
-    // ----------------------------------------------------------
-    // Intent classification
-    // ----------------------------------------------------------
+    // ------------------------------
+    // Classification
+    // ------------------------------
     const classification = await classifyQuestion(question);
     const safeIntent = classification?.intent || "general";
 
-    // ----------------------------------------------------------
-    // Personal mode is ONLY based on checkbox, NEVER classifier
-    // ----------------------------------------------------------
-    const personalMode =
-      isPersonal === "on" ||
-      isPersonal === "yes" ||
-      isPersonal === "true" ||
-      isPersonal === "1" ||
-      isPersonal === true;
-
-    // ----------------------------------------------------------
+    // ------------------------------
     // Generate insights
-    // ----------------------------------------------------------
+    // ------------------------------
     const insights = await generateInsights({
       question,
       isPersonal: personalMode,
@@ -110,7 +97,7 @@ export default async function handler(req, res) {
       birthDate,
       birthTime,
       birthPlace,
-      classify: { ...classification, intent: safeIntent },
+      classify: classification,
       palmistryData,
       technicalMode: !personalMode,
     });
@@ -119,19 +106,15 @@ export default async function handler(req, res) {
       return res.status(500).json({
         ok: false,
         error: "Insight generation failed",
-        detail: insights.error,
       });
     }
 
-    // ----------------------------------------------------------
-    // PERSONAL MODE → auto-generate & email PDF
-    // ----------------------------------------------------------
+    // ------------------------------
+    // PERSONAL REPORT — Auto PDF + Email
+    // ------------------------------
     if (personalMode) {
       if (!email) {
-        return res.json({
-          ok: false,
-          error: "Email is required for personal reports",
-        });
+        return res.status(400).json({ ok: false, error: "Email required" });
       }
 
       const pdfBuffer = await generatePDF({
@@ -144,7 +127,7 @@ export default async function handler(req, res) {
         insights,
         astrology: insights.astrology,
         numerology: insights.numerology,
-        palmistry: insights.palmistry,
+        palmistry: insights.palmistry
       });
 
       const emailResult = await sendEmailHTML({
@@ -152,14 +135,12 @@ export default async function handler(req, res) {
         subject: "Your Personal Spiritual Report",
         html: `<p>Your detailed personal report is attached.</p>`,
         attachments: [
-          {
-            filename: "spiritual-report.pdf",
-            content: pdfBuffer,
-          },
-        ],
+          { filename: "spiritual-report.pdf", content: pdfBuffer }
+        ]
       });
 
       if (!emailResult.success) {
+        console.error("EMAIL FAILURE:", emailResult);
         return res.status(500).json({
           ok: false,
           error: "Email failed",
@@ -171,14 +152,14 @@ export default async function handler(req, res) {
         ok: true,
         mode: "personal",
         shortAnswer: insights.shortAnswer,
-        pdfEmailed: true,
         intent: safeIntent,
+        pdfEmailed: true
       });
     }
 
-    // ----------------------------------------------------------
-    // TECHNICAL MODE → summary only
-    // ----------------------------------------------------------
+    // ------------------------------
+    // TECHNICAL REPORT — summary only
+    // ------------------------------
     return res.status(200).json({
       ok: true,
       mode: "technical",
@@ -186,11 +167,12 @@ export default async function handler(req, res) {
       keyPoints: insights.keyPoints,
       explanation: insights.explanation,
       recommendations: insights.recommendations,
-      pdfEmailed: false,
       intent: safeIntent,
+      pdfEmailed: false
     });
+
   } catch (err) {
-    console.error("Server error:", err);
+    console.error("SERVER ERROR:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
