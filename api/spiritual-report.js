@@ -1,12 +1,7 @@
 // /api/spiritual-report.js
-// ---------------------------------------------------------
-// Main endpoint for personal + technical spiritual reports
-// Named-exports compatible version
-// ---------------------------------------------------------
 
 import formidable from "formidable";
 import fs from "fs";
-
 import { verifyRecaptcha } from "./utils/verify-recaptcha.js";
 import { classifyQuestion } from "./utils/classify-question.js";
 import { analyzePalmImage } from "./utils/analyze-palm.js";
@@ -14,42 +9,26 @@ import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
 import { sendEmailHTML } from "./utils/send-email.js";
 
-// Needed for file uploads
-export const config = {
-  api: { bodyParser: false },
-};
+export const config = { api: { bodyParser: false } };
 
-// ---------------------------------------------------------
-// CORS
-// ---------------------------------------------------------
 function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-// ---------------------------------------------------------
-// MAIN HANDLER
-// ---------------------------------------------------------
 export default async function handler(req, res) {
   allowCors(res);
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-  if (req.method !== "POST") {
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST")
     return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
 
   try {
-    // ------------------------------
-    // 1. Parse multipart form
-    // ------------------------------
-    const form = formidable({
-      multiples: false,
-      keepExtensions: true,
-      allowEmptyFiles: true,
-    });
+    // -------------------------------
+    // Parse form data
+    // -------------------------------
+    const form = formidable({ keepExtensions: true, allowEmptyFiles: true });
 
     const { fields, files } = await new Promise((resolve, reject) => {
       form.parse(req, (err, f, fi) => {
@@ -69,41 +48,33 @@ export default async function handler(req, res) {
       recaptchaToken,
     } = fields;
 
-    if (!question) {
-      return res.status(400).json({ ok: false, error: "Question required." });
-    }
+    if (!question)
+      return res.status(400).json({ ok: false, error: "Question required" });
 
-    // ------------------------------
-    // 2. Verify Recaptcha
-    // ------------------------------
+    // -------------------------------
+    // recaptcha
+    // -------------------------------
     const captcha = await verifyRecaptcha(recaptchaToken);
-    if (!captcha.ok) {
-      return res.status(403).json({
-        ok: false,
-        error: "reCAPTCHA failed",
-        detail: captcha.error,
-      });
-    }
+    if (!captcha.ok)
+      return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
 
-    // ------------------------------
-    // 3. Palmistry image
-    // ------------------------------
+    // -------------------------------
+    // Palmistry
+    // -------------------------------
     const palmImagePath = files?.palmImage?.filepath || null;
     const palmistryData = await analyzePalmImage(palmImagePath);
 
-    // ------------------------------
-    // 4. Classification
-    // ------------------------------
+    // -------------------------------
+    // Intent classification
+    // -------------------------------
     const classification = await classifyQuestion(question);
-
-    // IMPORTANT FIX:
     const safeIntent = classification?.intent || "general";
 
     const personalMode = isPersonal === "yes";
 
-    // ------------------------------
-    // 5. Generate insights
-    // ------------------------------
+    // -------------------------------
+    // Generate insights
+    // -------------------------------
     const insights = await generateInsights({
       question,
       isPersonal: personalMode,
@@ -116,16 +87,15 @@ export default async function handler(req, res) {
       technicalMode: !personalMode,
     });
 
-    if (!insights.ok) {
+    if (!insights.ok)
       return res.status(500).json({
         ok: false,
-        error: insights.error || "Insight generation failed.",
+        error: "Insight generation failed",
       });
-    }
 
-    // ------------------------------
-    // 6. PERSONAL MODE → build PDF + email
-    // ------------------------------
+    // ===============================
+    // PERSONAL → PDF + EMAIL
+    // ===============================
     if (personalMode) {
       const pdfBuffer = await generatePDF({
         mode: "personal",
@@ -140,19 +110,20 @@ export default async function handler(req, res) {
         palmistry: insights.palmistry,
       });
 
-      const result = await sendEmailHTML({
+      // 🔥 FIXED: use sendEmailHTML
+      const emailResult = await sendEmailHTML({
         to: email,
         subject: "Your Personal Spiritual Report",
         html: `<p>Your detailed personal report is attached.</p>`,
-        attachments: [
-          { filename: "spiritual-report.pdf", content: pdfBuffer },
-        ],
+        attachments: [{ filename: "spiritual-report.pdf", content: pdfBuffer }],
       });
 
-      if (!result.success) {
+      if (!emailResult.success) {
+        console.error("Email failure:", emailResult);
         return res.status(500).json({
           ok: false,
-          error: result.error,
+          error: "Email failed",
+          detail: emailResult.error,
         });
       }
 
@@ -165,9 +136,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // ------------------------------
-    // 7. TECHNICAL MODE → no PDF yet
-    // ------------------------------
+    // ===============================
+    // TECHNICAL → summary only
+    // ===============================
     return res.status(200).json({
       ok: true,
       mode: "technical",
@@ -179,10 +150,10 @@ export default async function handler(req, res) {
       intent: safeIntent,
     });
   } catch (err) {
-    console.error("Spiritual-report error:", err);
+    console.error("Server error:", err);
     return res.status(500).json({
       ok: false,
-      error: err.message || "Server error",
+      error: err.message,
     });
   }
 }
