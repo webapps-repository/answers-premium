@@ -8,16 +8,13 @@
 import OpenAI from "openai";
 import { synthesizeTriad } from "./synthesize-triad.js";
 
-// OPTIONAL: if you want, you can move these into /api/utils/
-// For now, they remain local helper functions within this file.
+/* ======================================================
+   Numerology Helpers
+====================================================== */
 
-// -------------------------------------------
-// Helper: Compute numerology pack
-// -------------------------------------------
 function computeNumerology(fullName, birthDate) {
   if (!birthDate) return null;
 
-  // Basic numerology calculations — customizable
   const dob = new Date(birthDate);
   const lifePath = calculateLifePath(birthDate);
   const personalYear = calculatePersonalYear(dob);
@@ -33,41 +30,32 @@ function computeNumerology(fullName, birthDate) {
   };
 }
 
-// Numerology formulas
 function calculateLifePath(dateStr) {
   const digits = dateStr.replace(/\D/g, "").split("").map(Number);
   let sum = digits.reduce((a, b) => a + b, 0);
+
   while (sum > 9 && sum !== 11 && sum !== 22 && sum !== 33) {
     sum = sum.toString().split("").reduce((a, b) => a + Number(b), 0);
   }
+
   return sum;
 }
 
 function calculatePersonalYear(dob) {
   const now = new Date();
-  const sum = (dob.getDate() + dob.getMonth() + 1 + now.getFullYear())
-    .toString()
-    .split("")
-    .reduce((a, b) => a + Number(b), 0);
-
-  return reduceNumber(sum);
+  const y = dob.getDate() + dob.getMonth() + 1 + now.getFullYear();
+  return reduceNumber(y);
 }
 
 function calculatePersonalMonth(dob) {
   const now = new Date();
-  const monthSum = (dob.getMonth() + 1 + now.getMonth() + 1)
-    .toString()
-    .split("")
-    .reduce((a, b) => a + Number(b), 0);
-  return reduceNumber(monthSum);
+  const m = (dob.getMonth() + 1) + (now.getMonth() + 1);
+  return reduceNumber(m);
 }
 
 function reduceNumber(n) {
   while (n > 9 && n !== 11 && n !== 22 && n !== 33) {
-    n = n
-      .toString()
-      .split("")
-      .reduce((x, y) => x + Number(y), 0);
+    n = n.toString().split("").reduce((x, y) => x + Number(y), 0);
   }
   return n;
 }
@@ -98,9 +86,10 @@ const personalYearMeanings = {
   9: "A year of closure and transition."
 };
 
-// -------------------------------------------
-// EXPORT: Main function called by endpoints
-// -------------------------------------------
+/* ======================================================
+   MAIN EXPORTED FUNCTION
+====================================================== */
+
 export async function generateInsights({
   question,
   isPersonal,
@@ -117,21 +106,13 @@ export async function generateInsights({
       return await generateTechnicalInsights(question);
     }
 
-    // ------------------------------------------------------------
-    // PERSONAL MODE
-    // ------------------------------------------------------------
-
-    // 1. Numerology
+    // ---------- PERSONAL MODE ----------
     const numerologyPack = computeNumerology(fullName, birthDate);
-
-    // 2. Astrology (placeholder for now)
     const astrology = computeAstrologyMock(birthDate, birthTime, birthPlace);
-
-    // 3. Palmistry (already processed)
     const palmistry = palmistryData;
 
-    // 4. Unified Triad Synthesis
     const intent = classify?.intent || "general";
+
     const triad = synthesizeTriad({
       question,
       intent,
@@ -140,7 +121,6 @@ export async function generateInsights({
       palmistry
     });
 
-    // FINAL STRUCTURED OUTPUT
     return {
       ok: true,
       mode: "personal",
@@ -160,16 +140,14 @@ export async function generateInsights({
       }
     };
   } catch (err) {
-    return {
-      ok: false,
-      error: err.message || "Insight generation failed"
-    };
+    return { ok: false, error: err.message || "Insight generation failed" };
   }
 }
 
-// ------------------------------------------------------------
-// TECHNICAL MODE (priority on clarity, logic, and examples)
-// ------------------------------------------------------------
+/* ======================================================
+   TECHNICAL MODE
+====================================================== */
+
 async function generateTechnicalInsights(question) {
   return {
     ok: true,
@@ -186,5 +164,24 @@ Your technical question was processed with high-level reasoning.
 This explanation can include debugging steps, analysis, or conceptual breakdowns depending on the question.
     `,
     recommendations: `
-• Provide logs or stack trace
+• Provide logs or stack trace  
+• Include reproduction steps  
+• If you request a full PDF, you will get a formatted technical breakdown  
+`
+  };
+}
+
+/* ======================================================
+   MOCK ASTROLOGY (Placeholder)
+====================================================== */
+
+function computeAstrologyMock(date, time, place) {
+  return {
+    sun: "Aries",
+    moon: "Cancer",
+    rising: "Scorpio",
+    birthDate: date,
+    birthTime: time,
+    birthPlace: place
+  };
 }
