@@ -1,4 +1,5 @@
 // /api/detailed-report.js
+// Generates the PDF for technical questions
 
 import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
@@ -16,52 +17,50 @@ export default async function handler(req, res) {
   allowCors(res);
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ ok: false, error: "Method not allowed." });
+  if (req.method !== "POST") {
+    return res.status(405).json({ ok: false, error: "Method not allowed" });
+  }
 
   try {
     const { question, email } = req.body;
 
-    if (!email) return res.status(400).json({ ok: false, error: "Email required" });
     if (!question) return res.status(400).json({ ok: false, error: "Question required" });
+    if (!email) return res.status(400).json({ ok: false, error: "Email required" });
 
-    // Insights
     const insights = await generateInsights({
       question,
       technicalMode: true,
-      isPersonal: false,
+      isPersonal: false
     });
 
-    if (!insights.ok)
+    if (!insights.ok) {
       return res.status(500).json({
         ok: false,
-        error: insights.error,
+        error: "Insight generation failed",
+        detail: insights.error
       });
+    }
 
-    // PDF
     const pdfBuffer = await generatePDF({
       mode: "technical",
       question,
-      insights,
+      insights
     });
 
-    // Email
     const emailResult = await sendEmailHTML({
       to: email,
       subject: "Your Detailed Technical Report",
-      html: `<p>Your full technical report is attached.</p>`,
+      html: `<p>Your detailed technical report is attached.</p>`,
       attachments: [
-        {
-          filename: "technical-report.pdf",
-          content: pdfBuffer,
-        },
-      ],
+        { filename: "technical-report.pdf", content: pdfBuffer }
+      ]
     });
 
     if (!emailResult.success) {
       return res.status(500).json({
         ok: false,
-        error: emailResult.error,
+        error: "Email failed",
+        detail: emailResult.error
       });
     }
 
@@ -69,12 +68,14 @@ export default async function handler(req, res) {
       ok: true,
       pdfEmailed: true,
       shortAnswer: insights.shortAnswer,
+      stampedAt: new Date().toISOString()
     });
-  } catch (e) {
-    console.error("Detailed report error:", e);
+
+  } catch (err) {
+    console.error("DETAILED REPORT ERROR:", err);
     return res.status(500).json({
       ok: false,
-      error: e.message,
+      error: err.message
     });
   }
 }
