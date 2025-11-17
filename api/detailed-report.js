@@ -1,7 +1,4 @@
 // /api/detailed-report.js
-// -----------------------------------------------------------
-// Creates full technical PDF + emails to user
-// -----------------------------------------------------------
 
 import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
@@ -13,43 +10,35 @@ function allowCors(res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-export const config = {
-  api: { bodyParser: true },
-};
+export const config = { api: { bodyParser: true } };
 
 export default async function handler(req, res) {
   allowCors(res);
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ ok: false, error: "Method not allowed." });
-  }
 
   try {
-    const { email, question } = req.body;
+    const { question, email } = req.body;
 
-    if (!email || !question) {
-      return res.status(400).json({
-        ok: false,
-        error: "Missing email or question.",
-      });
-    }
+    if (!email) return res.status(400).json({ ok: false, error: "Email required" });
+    if (!question) return res.status(400).json({ ok: false, error: "Question required" });
 
-    // Get technical insights
+    // Insights
     const insights = await generateInsights({
       question,
       technicalMode: true,
       isPersonal: false,
     });
 
-    if (!insights.ok) {
+    if (!insights.ok)
       return res.status(500).json({
         ok: false,
         error: insights.error,
       });
-    }
 
-    // Build PDF
+    // PDF
     const pdfBuffer = await generatePDF({
       mode: "technical",
       question,
@@ -57,10 +46,10 @@ export default async function handler(req, res) {
     });
 
     // Email
-    const result = await sendEmailHTML({
+    const emailResult = await sendEmailHTML({
       to: email,
       subject: "Your Detailed Technical Report",
-      html: `<p>Your technical report is attached.</p>`,
+      html: `<p>Your full technical report is attached.</p>`,
       attachments: [
         {
           filename: "technical-report.pdf",
@@ -69,19 +58,23 @@ export default async function handler(req, res) {
       ],
     });
 
-    if (!result.success) {
+    if (!emailResult.success) {
       return res.status(500).json({
         ok: false,
-        error: result.error,
+        error: emailResult.error,
       });
     }
 
-    res.status(200).json({ ok: true, pdfEmailed: true });
-  } catch (err) {
-    console.error("Detailed-report error:", err);
-    res.status(500).json({
+    return res.status(200).json({
+      ok: true,
+      pdfEmailed: true,
+      shortAnswer: insights.shortAnswer,
+    });
+  } catch (e) {
+    console.error("Detailed report error:", e);
+    return res.status(500).json({
       ok: false,
-      error: err.message,
+      error: e.message,
     });
   }
 }
