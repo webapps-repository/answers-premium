@@ -48,6 +48,7 @@ export default async function handler(req, res) {
       });
     });
 
+    // SAFE INITIAL VALUES
     const question      = f(fields.question);
     const fullName      = f(fields.fullName);
     const birthDate     = f(fields.birthDate);
