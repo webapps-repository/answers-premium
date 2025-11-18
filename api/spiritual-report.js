@@ -11,6 +11,11 @@ import { sendEmailHTML } from "./utils/send-email.js";
 
 export const config = { api: { bodyParser: false } };
 
+// Flatten Date
+function f(v) {
+  return Array.isArray(v) ? v[0] : v || "";
+}
+
 // CORS
 function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
@@ -43,16 +48,14 @@ export default async function handler(req, res) {
       });
     });
 
-    const {
-      question,
-      fullName,
-      birthDate,
-      birthTime,
-      birthPlace,
-      email,
-      isPersonal,
-      recaptchaToken,
-    } = fields;
+    const question      = f(fields.question);
+    const fullName      = f(fields.fullName);
+    const birthDate     = f(fields.birthDate);
+    const birthTime     = f(fields.birthTime);
+    const birthPlace    = f(fields.birthPlace);
+    const email         = f(fields.email);
+    const isPersonal    = f(fields.isPersonal);
+    const recaptchaToken= f(fields.recaptchaToken);
 
     if (!question) return res.status(400).json({ ok: false, error: "Question required" });
 
