@@ -1,4 +1,6 @@
 // /api/utils/generate-pdf.js
+// Enhanced PDF builder for unified detailed spiritual reports + technical reports
+
 import PDFDocument from "pdfkit";
 
 export function generatePDF({
@@ -18,15 +20,23 @@ export function generatePDF({
       const doc = new PDFDocument({ size: "A4", margin: 40 });
 
       const chunks = [];
-      doc.on("data", d => chunks.push(d));
+      doc.on("data", (d) => chunks.push(d));
       doc.on("end", () => resolve(Buffer.concat(chunks)));
 
-      doc.fontSize(20)
+      // ------------------------------
+      // HEADER
+      // ------------------------------
+      doc
+        .fontSize(20)
         .text("Melodies Web — Detailed Report", { align: "center" })
-        .moveDown();
+        .moveDown(2);
 
-      doc.fontSize(12)
-        .text(`Your Question: "${question}"`)
+      // ------------------------------
+      // QUESTION
+      // ------------------------------
+      doc
+        .fontSize(12)
+        .text(`Your Question: "${question}"`, { align: "left" })
         .moveDown();
 
       if (mode === "personal") {
@@ -37,45 +47,133 @@ export function generatePDF({
         doc.moveDown();
       }
 
-      // summary
-      doc.fontSize(14)
-        .text("Summary", { underline: true })
-        .moveDown(0.5);
+      // ------------------------------
+      // SUMMARY ANSWER
+      // ------------------------------
+      createSectionHeader(doc, "Summary Answer");
+      doc
+        .fontSize(11)
+        .fillColor("black")
+        .text(insights.shortAnswer || "No summary available.", { align: "left" })
+        .moveDown(1.5);
 
-      doc.fontSize(11)
-        .text(insights.shortAnswer)
-        .moveDown();
-
-      // personal sections
+      // ======================================================
+      // PERSONAL MODE
+      // ======================================================
       if (mode === "personal") {
-        section(doc, "Astrology Interpretation", insights.interpretations.astrology);
-        section(doc, "Numerology Interpretation", insights.interpretations.numerology);
-        section(doc, "Palmistry Interpretation", insights.interpretations.palmistry);
-        section(doc, "Combined Synthesis", insights.interpretations.combined);
-        section(doc, "Timeline & Forecast", insights.interpretations.timeline);
-        section(doc, "Recommendations", insights.interpretations.recommendations);
+        // Astrology
+        createSectionHeader(doc, "Astrological Interpretation");
+        doc.text(insights.interpretations?.astrology || "N/A", { align: "left" }).moveDown();
+        createAstrologyTables(doc, astrology);
+
+        // Numerology
+        createSectionHeader(doc, "Numerological Interpretation");
+        doc.text(insights.interpretations?.numerology || "N/A", { align: "left" }).moveDown();
+        createNumerologyTable(doc, numerology);
+
+        // Palmistry
+        createSectionHeader(doc, "Palmistry Interpretation");
+        doc.text(insights.interpretations?.palmistry || "N/A", { align: "left" }).moveDown();
+        createPalmistryTable(doc, palmistry);
+
+        // Combined Synthesis
+        createSectionHeader(doc, "Combined Synthesis (Astrology + Numerology + Palmistry)");
+        doc.text(insights.interpretations?.combined || "N/A", { align: "left" }).moveDown();
+
+        // Timeline
+        createSectionHeader(doc, "Timeline & Forecast");
+        doc.text(insights.interpretations?.timeline || "N/A", { align: "left" }).moveDown();
+
+        // Recommendations
+        createSectionHeader(doc, "Guidance & Recommendations");
+        doc.text(insights.interpretations?.recommendations || "N/A", { align: "left" }).moveDown();
       }
 
-      // technical sections
+      // ======================================================
+      // TECHNICAL MODE — FULLY PATCHED SAFE VERSION
+      // ======================================================
       if (mode === "technical") {
-        section(doc, "Key Points", "• " + insights.keyPoints.join("\n• "));
-        section(doc, "Explanation", insights.explanation);
-        section(doc, "Recommendations", insights.recommendations);
+        // Flexible keyPoint handling
+        const keyPoints =
+          insights.keyPointsFinal ||
+          insights.keyPoints ||
+          [];
+
+        createSectionHeader(doc, "Key Points");
+
+        if (Array.isArray(keyPoints)) {
+          doc.text("• " + keyPoints.join("\n• "), { align: "left" }).moveDown();
+        } else if (typeof keyPoints === "string") {
+          doc.text(keyPoints, { align: "left" }).moveDown();
+        } else {
+          doc.text("No key points available.", { align: "left" }).moveDown();
+        }
+
+        // Detailed Explanation
+        createSectionHeader(doc, "Detailed Explanation");
+
+        if (Array.isArray(insights.explanation)) {
+          doc.text(insights.explanation.join("\n\n"), { align: "left" }).moveDown();
+        } else {
+          doc.text(insights.explanation || "No explanation provided.", { align: "left" }).moveDown();
+        }
+
+        // Recommendations
+        createSectionHeader(doc, "Recommendations");
+
+        const recs = insights.recommendations;
+
+        if (Array.isArray(recs)) {
+          doc.text("• " + recs.join("\n• "), { align: "left" }).moveDown();
+        } else {
+          doc.text(recs || "No recommendations available.", { align: "left" }).moveDown();
+        }
       }
 
+      // END PDF
       doc.end();
-
     } catch (err) {
       reject(err);
     }
   });
 }
 
-function section(doc, title, content) {
-  doc.moveDown()
+/* ======================================================
+   HELPERS
+====================================================== */
+
+function createSectionHeader(doc, title) {
+  doc
+    .moveDown()
     .fontSize(14)
+    .fillColor("#333")
     .text(title, { underline: true })
     .moveDown(0.5);
+}
 
-  doc.fontSize(11).text(content).moveDown();
+function createAstrologyTables(doc, astrology) {
+  if (!astrology) return;
+  doc.fontSize(11).text("Astrological Data:", { align: "left" });
+  for (const [k, v] of Object.entries(astrology)) {
+    doc.text(`${k}: ${v}`);
+  }
+  doc.moveDown();
+}
+
+function createNumerologyTable(doc, numerology) {
+  if (!numerology) return;
+  doc.fontSize(11).text("Numerology Data:", { align: "left" });
+  for (const [k, v] of Object.entries(numerology)) {
+    doc.text(`${k}: ${v}`);
+  }
+  doc.moveDown();
+}
+
+function createPalmistryTable(doc, palmistry) {
+  if (!palmistry) return;
+  doc.fontSize(11).text("Palmistry Data:", { align: "left" });
+  for (const [k, v] of Object.entries(palmistry)) {
+    doc.text(`${k}: ${v}`);
+  }
+  doc.moveDown();
 }
