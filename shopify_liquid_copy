@@ -36,7 +36,6 @@
 
     .spinner {display:none; text-align:center; margin-top:10px; color:#444;}
 
-    /* modal */
     #modal-bg {
       position:fixed; inset:0; background:rgba(0,0,0,0.45);
       display:none; justify-content:center; align-items:center; z-index:999999;
@@ -49,7 +48,6 @@
     .modal-send { background:#4caf50; color:white; }
     .modal-cancel { background:#ddd; color:black; }
 
-    /* progress bar */
     #progress { width:100%; height:8px; background:#eee; border-radius:6px; overflow:hidden; margin-top:10px; }
     #progress-inner { width:0%; height:100%; background:#6c63ff; transition:width .3s linear;}
   </style>
@@ -59,7 +57,7 @@
 <div id="wrapper">
   <h2>Your Question</h2>
 
-  <form id="main-form" enctype="multipart/form-data">
+  <form id="main-form" enctype="multipart/form-data" autocomplete="off">
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="isPersonal" style="width:20px;height:20px;">
       <label for="isPersonal" style="margin:0;">This is a personal question</label>
@@ -67,7 +65,7 @@
 
     <div class="field">
       <label>Your Question</label>
-      <textarea id="question" name="question" maxlength="200"></textarea>
+      <textarea id="question" name="question" maxlength="200" required></textarea>
     </div>
 
     <div id="personal-fields">
@@ -97,7 +95,6 @@
   </div>
 </div>
 
-<!-- modal -->
 <div id="modal-bg">
   <div id="modal">
     <h3>Enter your email</h3>
@@ -140,6 +137,9 @@ function animateProgress() {
   setTimeout(() => progressInner.style.width = "100%", 1400);
 }
 
+/* ============================================================
+   SUBMIT FORM → CALL SPIRITUAL-REPORT
+============================================================ */
 document.getElementById("main-form").addEventListener("submit", async (e) => {
   e.preventDefault();
 
@@ -149,19 +149,24 @@ document.getElementById("main-form").addEventListener("submit", async (e) => {
   animateProgress();
 
   const fd = new FormData();
-  fd.append("question", document.getElementById("question").value);
+
+  // ALWAYS send strings (fixes .trim() undefined)
+  fd.append("question", String(document.getElementById("question").value || ""));
   fd.append("isPersonal", personalBox.checked ? "true" : "false");
   fd.append("recaptchaToken", token);
 
   if (personalBox.checked) {
-    fd.append("email", document.getElementById("email").value);
-    fd.append("fullName", document.getElementById("fullName").value);
-    fd.append("birthDate", document.getElementById("birthDate").value);
-    fd.append("birthTime", document.getElementById("birthTime").value);
-    fd.append("birthPlace",
-      [document.getElementById("birthCity").value,
-       document.getElementById("birthState").value,
-       document.getElementById("birthCountry").value].join(", ")
+    fd.append("email", String(document.getElementById("email").value || ""));
+    fd.append("fullName", String(document.getElementById("fullName").value || ""));
+    fd.append("birthDate", String(document.getElementById("birthDate").value || ""));
+    fd.append("birthTime", String(document.getElementById("birthTime").value || ""));
+    fd.append(
+      "birthPlace",
+      [
+        String(document.getElementById("birthCity").value || ""),
+        String(document.getElementById("birthState").value || ""),
+        String(document.getElementById("birthCountry").value || "")
+      ].join(", ")
     );
 
     const palm = document.querySelector('input[name="palmImage"]').files[0];
@@ -171,20 +176,22 @@ document.getElementById("main-form").addEventListener("submit", async (e) => {
   const raw = await fetch(API_SUMMARY, { method:"POST", body:fd });
   const json = await raw.json();
 
-  document.getElementById("summary-text").textContent = json.shortAnswer || "(no answer returned)";
+  document.getElementById("summary-text").textContent =
+    json.shortAnswer || "(no answer returned)";
+
   document.getElementById("summary").style.display = "block";
 
-  if (json.pdfEmailed) {
-    document.getElementById("pdf-btn").style.display = "none";
-  } else {
-    document.getElementById("pdf-btn").style.display = "block";
-  }
+  document.getElementById("pdf-btn").style.display =
+    json.pdfEmailed ? "none" : "block";
 
   grecaptcha.reset(recaptchaId);
 });
 
-// modal logic
+/* ============================================================
+   PDF BUTTON → EMAIL MODAL (TECHNICAL MODE)
+============================================================ */
 const modal = document.getElementById("modal-bg");
+
 document.getElementById("pdf-btn").addEventListener("click", () => {
   const email = document.getElementById("email").value.trim();
   if (personalBox.checked && email) {
@@ -193,11 +200,14 @@ document.getElementById("pdf-btn").addEventListener("click", () => {
   }
   modal.style.display = "flex";
 });
-document.getElementById("modal-cancel").addEventListener("click", () => modal.style.display = "none");
+
+document.getElementById("modal-cancel").addEventListener("click", () => {
+  modal.style.display = "none";
+});
+
 document.getElementById("modal-send").addEventListener("click", async () => {
   const email = document.getElementById("modal-email").value.trim();
   if (!email) return alert("Enter an email.");
-
   modal.style.display = "none";
 
   const body = JSON.stringify({
