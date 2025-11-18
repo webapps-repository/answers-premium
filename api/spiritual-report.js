@@ -1,7 +1,9 @@
 // /api/spiritual-report.js
-// Handles both personal & technical spiritual reports
+// Main endpoint for personal + technical questions
 
 import formidable from "formidable";
+import fs from "fs";
+
 import { verifyRecaptcha } from "./utils/verify-recaptcha.js";
 import { classifyQuestion } from "./utils/classify-question.js";
 import { analyzePalmImage } from "./utils/analyze-palm.js";
@@ -9,14 +11,10 @@ import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
 import { sendEmailHTML } from "./utils/send-email.js";
 
-export const config = { api: { bodyParser: false } };
+export const config = {
+  api: { bodyParser: false }
+};
 
-// Flatten Date
-function f(v) {
-  return Array.isArray(v) ? v[0] : v || "";
-}
-
-// CORS
 function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -27,73 +25,61 @@ export default async function handler(req, res) {
   allowCors(res);
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
 
   try {
-    // ------------------------------
-    // Parse FormData
-    // ------------------------------
-    const form = formidable({
-      keepExtensions: true,
-      allowEmptyFiles: true,
-      multiples: false
-    });
+    // -----------------------------------------
+    // Parse multipart/form-data
+    // -----------------------------------------
+    const form = formidable({ keepExtensions: true, allowEmptyFiles: true });
 
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, f, fl) => {
+      form.parse(req, (err, f, fi) => {
         if (err) reject(err);
-        else resolve({ fields: f, files: fl });
+        else resolve({ fields: f, files: fi });
       });
     });
 
-    // SAFE INITIAL VALUES
-    const question      = f(fields.question);
-    const fullName      = f(fields.fullName);
-    const birthDate     = f(fields.birthDate);
-    const birthTime     = f(fields.birthTime);
-    const birthPlace    = f(fields.birthPlace);
-    const email         = f(fields.email);
-    const isPersonal    = f(fields.isPersonal);
-    const recaptchaToken= f(fields.recaptchaToken);
+    const {
+      question,
+      fullName,
+      birthDate,
+      birthTime,
+      birthPlace,
+      email,
+      isPersonal,
+      recaptchaToken
+    } = fields;
 
-    if (!question) return res.status(400).json({ ok: false, error: "Question required" });
+    if (!question || question.trim().length === 0)
+      return res.status(400).json({ ok: false, error: "Question required" });
 
-    // Normalize isPersonal
-    const personalMode =
-      String(isPersonal) === "true" ||
-      String(isPersonal) === "1" ||
-      String(isPersonal).toLowerCase() === "yes";
-
-    // Normalize recaptcha token
-    const token = Array.isArray(recaptchaToken)
-      ? recaptchaToken[0]
-      : recaptchaToken;
-
-    // ------------------------------
+    // -----------------------------------------
     // Verify reCAPTCHA
-    // ------------------------------
-    const captcha = await verifyRecaptcha(token);
-    if (!captcha.ok) {
+    // -----------------------------------------
+    const captcha = await verifyRecaptcha(recaptchaToken);
+    if (!captcha.ok)
       return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
-    }
 
-    // ------------------------------
+    // -----------------------------------------
     // Palmistry
-    // ------------------------------
+    // -----------------------------------------
     const palmImagePath = files?.palmImage?.filepath || null;
     const palmistryData = await analyzePalmImage(palmImagePath);
 
-    // ------------------------------
-    // Classification
-    // ------------------------------
+    // -----------------------------------------
+    // Intent classification
+    // -----------------------------------------
     const classification = await classifyQuestion(question);
     const safeIntent = classification?.intent || "general";
 
-    // ------------------------------
-    // Generate insights
-    // ------------------------------
+    const personalMode =
+      isPersonal === "yes" || isPersonal === "true" || isPersonal === true;
+
+    // -----------------------------------------
+    // Unified Insights
+    // -----------------------------------------
     const insights = await generateInsights({
       question,
       isPersonal: personalMode,
@@ -101,26 +87,23 @@ export default async function handler(req, res) {
       birthDate,
       birthTime,
       birthPlace,
-      classify: classification,
+      classify: { ...classification, intent: safeIntent },
       palmistryData,
-      technicalMode: !personalMode,
+      technicalMode: !personalMode
     });
 
     if (!insights.ok) {
       return res.status(500).json({
         ok: false,
         error: "Insight generation failed",
+        detail: insights.error
       });
     }
 
-    // ------------------------------
-    // PERSONAL REPORT — Auto PDF + Email
-    // ------------------------------
+    // =====================================================
+    // PERSONAL MODE → PDF AUTO EMAIL
+    // =====================================================
     if (personalMode) {
-      if (!email) {
-        return res.status(400).json({ ok: false, error: "Email required" });
-      }
-
       const pdfBuffer = await generatePDF({
         mode: "personal",
         question,
@@ -137,18 +120,18 @@ export default async function handler(req, res) {
       const emailResult = await sendEmailHTML({
         to: email,
         subject: "Your Personal Spiritual Report",
-        html: `<p>Your detailed personal report is attached.</p>`,
+        html: `<p>Your personal spiritual report is attached.</p>`,
         attachments: [
           { filename: "spiritual-report.pdf", content: pdfBuffer }
         ]
       });
 
       if (!emailResult.success) {
-        console.error("EMAIL FAILURE:", emailResult);
+        console.error("EMAIL ERROR:", emailResult);
         return res.status(500).json({
           ok: false,
-          error: "Email failed",
-          detail: emailResult.error,
+          error: "Email delivery failed",
+          detail: emailResult.error
         });
       }
 
@@ -161,9 +144,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // ------------------------------
-    // TECHNICAL REPORT — summary only
-    // ------------------------------
+    // =====================================================
+    // TECHNICAL MODE → Return short summary & data
+    // =====================================================
     return res.status(200).json({
       ok: true,
       mode: "technical",
@@ -171,12 +154,15 @@ export default async function handler(req, res) {
       keyPoints: insights.keyPoints,
       explanation: insights.explanation,
       recommendations: insights.recommendations,
-      intent: safeIntent,
-      pdfEmailed: false
+      pdfEmailed: false,
+      intent: safeIntent
     });
 
   } catch (err) {
     console.error("SERVER ERROR:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    return res.status(500).json({
+      ok: false,
+      error: err.message || "Server failure"
+    });
   }
 }
