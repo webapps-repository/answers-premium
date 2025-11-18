@@ -5,33 +5,59 @@ export function synthesizeTriad({
   intent,
   astrology,
   numerology,
-  palmistry,
+  palmistry
 }) {
+  const shortAnswer =
+    `Your question "${question}" shows strong developmental movement in the area of ${intent}. ` +
+    `Astrology, numerology and palmistry patterns all point toward meaningful progress ahead.`;
 
-  const shortAnswer = `Here is your clear answer regarding ${intent}: Based on your combined astrology, palmistry, and numerology profile, the energy surrounding "${question}" shows movement toward clarity, resolution, and meaningful development in this area.`;
-
+  /* ASTRO */
   const astroInterpretation = `
-Your astrological placements (Sun: ${astrology?.sun}, Moon: ${astrology?.moon}, Rising: ${astrology?.rising}) shape the emotional and energetic backdrop of your question about ${intent}.
-`;
+Your chart highlights internal motivations and emotional influences connected to your question.
+• Sun: ${astrology?.sun}
+• Moon: ${astrology?.moon}
+• Rising: ${astrology?.rising}
+Key transits: ${astrology?.transit1}, ${astrology?.transit2}
+  `;
 
-  const numerologyInterpretation = `
-Your Life Path (${numerology?.lifePath}) and Personal Year (${numerology?.personalYear}) show timing patterns that influence how your question unfolds.
-`;
+  /* NUMEROLOGY */
+  const numerologyInterpretation = numerology
+    ? `
+Your Life Path ${numerology.lifePath} (${numerology.lifePathMeaning})
+and your current Personal Year ${numerology.personalYear} (${numerology.personalYearMeaning})
+shape the timing and emotional tone of your question.
+`
+    : "No numerology data provided.";
 
+  /* PALMISTRY */
   const palmInterpretation = `
-Palm features such as your heart, head, life, and fate lines add subconscious and intuitive insight into your question about ${intent}.
+Palm features reflect deeper emotional + subconscious patterns influencing your situation.
+Heart Line: ${palmistry?.features?.heartLine}
+Head Line: ${palmistry?.features?.headLine}
+Life Line: ${palmistry?.features?.lifeLine}
+Fate Line: ${palmistry?.features?.fateLine}
 `;
 
+  /* COMBINED */
   const combined = `
-Combining astrology, numerology, and palmistry reveals that the question "${question}" is influenced by aligned cycles of timing, emotional clarity, and intuitive guidance.
+Astrology = motivations & energy cycles  
+Numerology = timing & life-cycle patterns  
+Palmistry = subconscious emotional direction  
+
+Together, they reveal a unified answer to your question "${question}".
 `;
 
+  /* TIMELINE */
   const timeline = `
-Most progress occurs during Personal Year ${numerology?.personalYear}, especially in months ${numerology?.personalMonthRange}.
+Most significant movement occurs during Personal Year ${numerology?.personalYear}.  
+Astrological transits such as ${astrology?.transit1} support forward momentum.  
 `;
 
+  /* RECOMMENDATIONS */
   const recommendations = `
-Stay aligned with your Sun & Rising strengths, follow intuitive insights shown in your palm lines, and act during supportive numerology cycles.
+1. Follow supportive astrological transits for decision-making.
+2. Align your actions with your Personal Year themes.
+3. Use intuition highlighted by your palm lines.
 `;
 
   return {
