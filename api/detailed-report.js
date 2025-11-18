@@ -1,5 +1,5 @@
 // /api/detailed-report.js
-// Generates the PDF for technical questions
+// Generates a full technical (coding + financial intelligence) PDF
 
 import { generateInsights } from "./utils/generate-insights.js";
 import { generatePDF } from "./utils/generate-pdf.js";
@@ -11,22 +11,31 @@ function allowCors(res) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 }
 
-export const config = { api: { bodyParser: true } };
+export const config = {
+  api: { bodyParser: true }
+};
 
 export default async function handler(req, res) {
   allowCors(res);
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
+  if (req.method !== "POST")
+    return res.status(405).json({ ok: false, error: "Method not allowed." });
 
   try {
     const { question, email } = req.body;
 
-    if (!question) return res.status(400).json({ ok: false, error: "Question required" });
-    if (!email) return res.status(400).json({ ok: false, error: "Email required" });
+    if (!question)
+      return res
+        .status(400)
+        .json({ ok: false, error: "Question is required" });
 
+    if (!email)
+      return res.status(400).json({ ok: false, error: "Email is required" });
+
+    // ------------------------------------------
+    // Technical insights (financial + coding)
+    // ------------------------------------------
     const insights = await generateInsights({
       question,
       technicalMode: true,
@@ -41,12 +50,18 @@ export default async function handler(req, res) {
       });
     }
 
+    // ------------------------------------------
+    // Generate full technical PDF
+    // ------------------------------------------
     const pdfBuffer = await generatePDF({
       mode: "technical",
       question,
       insights
     });
 
+    // ------------------------------------------
+    // Email PDF
+    // ------------------------------------------
     const emailResult = await sendEmailHTML({
       to: email,
       subject: "Your Detailed Technical Report",
@@ -68,7 +83,7 @@ export default async function handler(req, res) {
       ok: true,
       pdfEmailed: true,
       shortAnswer: insights.shortAnswer,
-      stampedAt: new Date().toISOString()
+      sentAt: new Date().toISOString()
     });
 
   } catch (err) {
