@@ -7,10 +7,7 @@ import fs from "fs";
 // NEW IMPORT PATHS (from /lib)
 import { generateInsights } from "../lib/insights.js";
 import { generatePDF } from "../lib/pdf.js";
-import {
-  sendEmailHTML,
-  validateUploadedFile
-} from "../lib/utils.js";
+import { verifyRecaptcha, sendEmailHTML, validateUploadedFile } from "../lib/utils.js";
 
 export const config = { api: { bodyParser: false } };
 
