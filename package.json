@@ -9,6 +9,7 @@
     "build": "echo '✅ Build complete - Ready for Vercel deploy'"
   },
   "dependencies": {
+    "@resvg/resvg-js": "^2.4.0",
     "@types/node": "^22.8.5",
     "astronomy-engine": "^2.1.19",
     "formidable": "^3.5.1",
