@@ -1,11 +1,9 @@
 // /api/technical-report.js
-// Wrapper endpoint (alias) for generating technical PDFs
-
 import formidable from "formidable";
 import fs from "fs";
 
-import { generateInsights } from "../lib/insights.js";
-import { generatePDF } from "../lib/pdf.js";
+import { generateInsights, generateTechnicalReportHTML } from "../lib/insights.js";
+import { generatePDFBufferFromHTML } from "../lib/pdf.js";
 import { verifyRecaptcha, sendEmailHTML, validateUploadedFile } from "../lib/utils.js";
 
 export const config = { api: { bodyParser: false } };
@@ -24,98 +22,62 @@ export default async function handler(req, res) {
     return res.status(405).json({ ok: false, error: "Method not allowed" });
 
   try {
-    let email = "";
-    let question = "";
-    let techFilePath = null;
-
-    const form = formidable({
-      keepExtensions: true,
-      allowEmptyFiles: true,
-      multiples: false,
-    });
-
+    const form = formidable({ keepExtensions: true, allowEmptyFiles: true, multiples: false });
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, f, fi) => {
-        if (err) reject(err);
-        else resolve({ fields: f, files: fi });
-      });
+      form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })));
     });
 
-    email = String(fields.email || "").trim();
-    question = String(fields.question || "").trim();
+    const email = (fields.email || "").toString().trim();
+    const question = (fields.question || "").toString().trim();
+    const recaptcha = await verifyRecaptcha(fields.recaptchaToken);
 
+    if (!recaptcha.ok)
+      return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
+
+    if (!email) return res.status(400).json({ ok: false, error: "Email required" });
+    if (!question) return res.status(400).json({ ok: false, error: "Question required" });
+
+    // Optional tech file
+    let fileBuffer = null;
     if (files?.techFile?.filepath && fs.existsSync(files.techFile.filepath)) {
       const safe = validateUploadedFile(files.techFile);
       if (!safe.ok) {
         fs.unlinkSync(files.techFile.filepath);
         return res.status(400).json({ ok: false, error: safe.error });
       }
-      techFilePath = files.techFile.filepath;
+      fileBuffer = fs.readFileSync(files.techFile.filepath);
+      fs.unlinkSync(files.techFile.filepath);
     }
 
-    if (!question)
-      return res.status(400).json({ ok: false, error: "Question required" });
-
-    if (!email)
-      return res.status(400).json({ ok: false, error: "Email required" });
-
+    // Insights
     const insights = await generateInsights({
       question,
-      isPersonal: false,
-      classify: { type: "technical", intent: "technical" },
-      palmistryData: null,
-      technicalMode: true,
-      techFilePath
+      meta: { email },
+      enginesInput: { palm: null }
     });
 
-    if (!insights.ok) {
-      if (techFilePath && fs.existsSync(techFilePath))
-        fs.unlinkSync(techFilePath);
+    // HTML → PDF
+    const html = generateTechnicalReportHTML(insights);
+    const pdfBuffer = await generatePDFBufferFromHTML(html);
 
-      return res.status(500).json({
-        ok: false,
-        error: "Insight generation failed",
-        detail: insights.error,
-      });
-    }
-
-    if (techFilePath && fs.existsSync(techFilePath))
-      fs.unlinkSync(techFilePath);
-
-    const pdfBuffer = await generatePDF({
-      mode: "technical",
-      question,
-      insights,
-    });
-
-    const emailResult = await sendEmailHTML({
+    // Email
+    await sendEmailHTML({
       to: email,
       subject: "Your Technical Report",
       html: `<p>Your detailed technical report is attached.</p>`,
       attachments: [
-        { filename: "technical-report.pdf", content: pdfBuffer }
-      ],
+        {
+          filename: "technical-report.pdf",
+          type: "application/pdf",
+          content: pdfBuffer.toString("base64")
+        }
+      ]
     });
 
-    if (!emailResult.success) {
-      return res.status(500).json({
-        ok: false,
-        error: "Email failed",
-        detail: emailResult.error,
-      });
-    }
-
-    return res.status(200).json({
-      ok: true,
-      status: "sent"
-    });
+    return res.status(200).json({ ok: true, status: "sent" });
 
   } catch (err) {
-    console.error("TECH REPORT ERROR:", err);
-    return res.status(500).json({
-      ok: false,
-      error: err.message || "Server error",
-    });
+    console.error("TECHNICAL REPORT ERROR:", err);
+    return res.status(500).json({ ok: false, error: err.message });
   }
 }
-
