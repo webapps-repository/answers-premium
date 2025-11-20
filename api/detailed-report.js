@@ -1,9 +1,9 @@
 // /pages/api/detailed-report.js
 import formidable from "formidable";
 import fs from "fs";
-import { validateUploadedFile, verifyRecaptcha, sendEmailHTML } from "../../lib/utils";
-import { generateInsights, generateTechnicalReportHTML } from "../../lib/insights";
-import { generatePDFBufferFromHTML } from "../../lib/pdf";
+import { validateUploadedFile, verifyRecaptcha, sendEmailHTML } from "../lib/utils";
+import { generateInsights, generateTechnicalReportHTML } from "../lib/insights";
+import { generatePDFBufferFromHTML } from "../lib/pdf";
 
 export const config = {
   api: {
