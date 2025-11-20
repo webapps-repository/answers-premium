@@ -1,19 +1,15 @@
 // /api/spiritual-report.js
-// PERSONAL + TECHNICAL ENTRYPOINT
-
 import formidable from "formidable";
 import fs from "fs";
 
-// NEW IMPORT PATHS (lib instead of utils)
 import { verifyRecaptcha, sendEmailHTML, validateUploadedFile } from "../lib/utils.js";
 import { classifyQuestion } from "../lib/ai.js";
 import { analyzePalm } from "../lib/engines.js";
-import { generateInsights } from "../lib/insights.js";
-import { generatePDF } from "../lib/pdf.js";
+import { generateInsights, generateTechnicalReportHTML } from "../lib/insights.js";
+import { generatePDFBufferFromHTML } from "../lib/pdf.js";
 
 export const config = { api: { bodyParser: false } };
 
-// ------------------------------------
 function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -28,154 +24,106 @@ function normalizeField(fields, key) {
 
 export default async function handler(req, res) {
   allowCors(res);
+
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")
     return res.status(405).json({ ok: false, error: "Method not allowed" });
 
   try {
-    // -----------------------------------------
-    // Parse form-data
-    // -----------------------------------------
-    const form = formidable({
-      keepExtensions: true,
-      allowEmptyFiles: true,
-      multiples: false
-    });
-
+    // Parse form data
+    const form = formidable({ keepExtensions: true, allowEmptyFiles: true, multiples: false });
     const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, f, fi) => {
-        if (err) reject(err);
-        else resolve({ fields: f, files: fi });
-      });
+      form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })));
     });
 
     const question = normalizeField(fields, "question")?.trim();
-    if (!question) return res.status(400).json({ ok: false, error: "Question required" });
-
     const fullName = normalizeField(fields, "fullName");
     const birthDate = normalizeField(fields, "birthDate");
     const birthTime = normalizeField(fields, "birthTime");
     const birthPlace = normalizeField(fields, "birthPlace");
     const email = normalizeField(fields, "email");
-    const rawIsPersonal = normalizeField(fields, "isPersonal");
+    const isPersonalFlag = normalizeField(fields, "isPersonal");
     const recaptchaToken =
       normalizeField(fields, "recaptchaToken") ||
       normalizeField(fields, "g-recaptcha-response");
 
-    // -------- reCAPTCHA --------------------------------
+    if (!question) return res.status(400).json({ ok: false, error: "Question required." });
+
+    // Recaptcha
     const captcha = await verifyRecaptcha(recaptchaToken);
-    if (!captcha.ok)
-      return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
+    if (!captcha.ok) return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
 
-    // ----------------- Palmistry Image ------------------
-    let palmImagePath = null;
-    const palm = files?.palmImage;
+    // Palm
+    let palmFile = files?.palmImage;
+    let palmistryData = null;
 
-    if (Array.isArray(palm) && palm[0]?.filepath) {
-      palmImagePath = palm[0].filepath;
-    } else if (palm?.filepath) {
-      palmImagePath = palm.filepath;
+    if (palmFile) {
+      const val = validateUploadedFile(palmFile);
+      if (val.ok) {
+        const path = palmFile.filepath;
+        const buf = fs.readFileSync(path);
+        palmistryData = await analyzePalm({ imageDescription: "User Palm Image", handMeta: {}, buffer: buf });
+      }
     }
 
-    const palmistryData = await analyzePalmImage(palmImagePath);
-
-    // ---------------- Classification --------------------
+    // Classification
     const classification = await classifyQuestion(question).catch(() => null);
     const safeIntent = classification?.intent || "general";
 
-    const personalMode = ["yes", "true", "on", "1"].includes(
-      String(rawIsPersonal).toLowerCase()
-    );
+    // Personal mode?
+    const isPersonal = ["yes", "true", "1", "on"].includes(String(isPersonalFlag).toLowerCase());
 
-    // --------------------- Insights ---------------------
+    // Insights
     const insights = await generateInsights({
       question,
-      isPersonal: personalMode,
-      fullName,
-      birthDate,
-      birthTime,
-      birthPlace,
-      palmistryData,
-      classify: { ...(classification || {}), intent: safeIntent },
-      technicalMode: !personalMode
+      meta: { fullName, birthDate, birthTime, birthPlace },
+      enginesInput: {
+        palm: palmistryData,
+        numerology: { fullName, dateOfBirth: birthDate },
+        astrology: { birthDate, birthTime, birthLocation: birthPlace }
+      }
     });
 
-    if (!insights.ok) {
-      return res.status(500).json({
-        ok: false,
-        error: "Insight generation failed",
-        detail: insights.error
-      });
-    }
-
-    // =====================================================
-    // PERSONAL MODE → AUTO PDF + AUTO EMAIL
-    // =====================================================
-    if (personalMode) {
-      let pdfBuffer = null;
-
-      try {
-        pdfBuffer = await generatePDF({
-          mode: "personal",
-          question,
-          fullName,
-          birthDate,
-          birthTime,
-          birthPlace,
-          insights,
-          astrology: insights.astrology,
-          numerology: insights.numerology,
-          palmistry: insights.palmistry
-        });
-      } catch (err) {
-        console.error("PDF ERROR:", err);
-        return res.status(500).json({ ok: false, error: "PDF generation failed" });
-      }
+    // PERSONAL MODE → PDF + EMAIL
+    if (isPersonal) {
+      const html = generateTechnicalReportHTML(insights);
+      const pdfBuffer = await generatePDFBufferFromHTML(html);
 
       if (email) {
-        const emailResult = await sendEmailHTML({
+        await sendEmailHTML({
           to: email,
           subject: "Your Personal Spiritual Report",
-          html: `<p>Your personal spiritual report is attached.</p>`,
+          html: `<p>Your spiritual report is attached.</p>`,
           attachments: [
-            { filename: "spiritual-report.pdf", content: pdfBuffer }
+            {
+              filename: "spiritual-report.pdf",
+              type: "application/pdf",
+              content: pdfBuffer.toString("base64")
+            }
           ]
         });
-
-        if (!emailResult.success) {
-          return res.status(500).json({
-            ok: false,
-            error: "Email delivery failed",
-            detail: emailResult.error
-          });
-        }
       }
 
       return res.status(200).json({
         ok: true,
         mode: "personal",
-        shortAnswer: insights.shortAnswer,
+        emailed: Boolean(email),
         intent: safeIntent,
-        pdfEmailed: !!email
+        insights
       });
     }
 
-    // =====================================================
-    // TECHNICAL MODE → No auto PDF
-    // =====================================================
+    // TECHNICAL MODE → JSON only
     return res.status(200).json({
       ok: true,
       mode: "technical",
-      shortAnswer: insights.shortAnswer,
-      keyPoints: insights.keyPoints,
-      explanation: insights.explanation,
-      recommendations: insights.recommendations,
-      pdfEmailed: false,
-      intent: safeIntent
+      emailed: false,
+      intent: safeIntent,
+      insights
     });
 
   } catch (err) {
-    console.error("SERVER ERROR:", err);
+    console.error("SPIRITUAL REPORT ERROR:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
