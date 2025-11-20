@@ -2,7 +2,9 @@
   "name": "answers",
   "version": "2.0.0",
   "type": "module",
-  "engines": { "node": "22.x" },
+  "engines": {
+    "node": "22.x"
+  },
   "main": "index.js",
   "scripts": {
     "start": "node api/spiritual-report.js",
@@ -10,15 +12,13 @@
   },
   "dependencies": {
     "@resvg/resvg-js": "^2.4.0",
-    "@types/node": "^22.8.5",
     "astronomy-engine": "^2.1.19",
     "formidable": "^3.5.1",
     "get-stream": "^6.0.1",
     "luxon": "^3.5.0",
     "node-fetch": "^3.3.2",
     "openai": "^4.58.1",
-    "pdfkit": "^0.17.2",
-    "resend": "^6.4.1"
+    "resend": "^6.5.0",
     "satori": "^0.10.10",
     "yoga-wasm-web": "^0.3.0"
   }
