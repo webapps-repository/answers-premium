@@ -1,129 +1,104 @@
 // /api/spiritual-report.js
 import formidable from "formidable";
 import fs from "fs";
-
 import { verifyRecaptcha, sendEmailHTML, validateUploadedFile } from "../lib/utils.js";
 import { classifyQuestion } from "../lib/ai.js";
 import { analyzePalm } from "../lib/engines.js";
-import { generateInsights, generateTechnicalReportHTML } from "../lib/insights.js";
+import { generateInsights } from "../lib/insights.js";
 import { generatePDFBufferFromHTML } from "../lib/pdf.js";
 
 export const config = { api: { bodyParser: false } };
 
-function allowCors(res) {
+// Unified CORS
+function applyCORS(req, res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") {
+    res.status(200).end();
+    return true;
+  }
+  return false;
 }
 
-function normalizeField(fields, key) {
+function norm(fields, key) {
   const v = fields?.[key];
-  if (Array.isArray(v)) return v[0];
-  return v ?? "";
+  return Array.isArray(v) ? v[0] : v;
 }
 
 export default async function handler(req, res) {
-  allowCors(res);
+  if (applyCORS(req, res)) return;
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
+  }
 
   try {
-    // Parse form data
-    const form = formidable({ keepExtensions: true, allowEmptyFiles: true, multiples: false });
+    const form = formidable({ keepExtensions: true });
     const { fields, files } = await new Promise((resolve, reject) => {
       form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })));
     });
 
-    const question = normalizeField(fields, "question")?.trim();
-    const fullName = normalizeField(fields, "fullName");
-    const birthDate = normalizeField(fields, "birthDate");
-    const birthTime = normalizeField(fields, "birthTime");
-    const birthPlace = normalizeField(fields, "birthPlace");
-    const email = normalizeField(fields, "email");
-    const isPersonalFlag = normalizeField(fields, "isPersonal");
-    const recaptchaToken =
-      normalizeField(fields, "recaptchaToken") ||
-      normalizeField(fields, "g-recaptcha-response");
+    const question = norm(fields, "question")?.trim();
+    if (!question) return res.status(400).json({ ok: false, error: "Missing question" });
 
-    if (!question) return res.status(400).json({ ok: false, error: "Question required." });
+    const recaptcha = norm(fields, "recaptchaToken");
+    const recapResult = await verifyRecaptcha(recaptcha);
+    if (!recapResult.ok) return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
 
-    // Recaptcha
-    const captcha = await verifyRecaptcha(recaptchaToken);
-    if (!captcha.ok) return res.status(403).json({ ok: false, error: "reCAPTCHA failed" });
+    const email = norm(fields, "email");
+    const fullName = norm(fields, "fullName");
+    const birthDate = norm(fields, "birthDate");
+    const birthTime = norm(fields, "birthTime");
+    const birthPlace = norm(fields, "birthPlace");
 
     // Palm
-    let palmFile = files?.palmImage;
-    let palmistryData = null;
-
-    if (palmFile) {
-      const val = validateUploadedFile(palmFile);
-      if (val.ok) {
-        const path = palmFile.filepath;
-        const buf = fs.readFileSync(path);
-        palmistryData = await analyzePalm({ imageDescription: "User Palm Image", handMeta: {}, buffer: buf });
-      }
+    let palmData = null;
+    const palm = files?.palmImage;
+    if (palm?.filepath) {
+      const safe = validateUploadedFile(palm);
+      if (!safe.ok) return res.status(400).json({ ok: false, error: safe.error });
+      palmData = await analyzePalm({ buffer: fs.readFileSync(palm.filepath) });
     }
 
-    // Classification
-    const classification = await classifyQuestion(question).catch(() => null);
-    const safeIntent = classification?.intent || "general";
-
-    // Personal mode?
-    const isPersonal = ["yes", "true", "1", "on"].includes(String(isPersonalFlag).toLowerCase());
-
-    // Insights
+    const classification = await classifyQuestion(question).catch(() => ({ type: "general" }));
     const insights = await generateInsights({
       question,
-      meta: { fullName, birthDate, birthTime, birthPlace },
+      meta: { email, fullName },
       enginesInput: {
-        palm: palmistryData,
+        palm: palmData ? { buffer: palmData } : null,
         numerology: { fullName, dateOfBirth: birthDate },
         astrology: { birthDate, birthTime, birthLocation: birthPlace }
       }
     });
 
-    // PERSONAL MODE → PDF + EMAIL
-    if (isPersonal) {
-      const html = generateTechnicalReportHTML(insights);
-      const pdfBuffer = await generatePDFBufferFromHTML(html);
+    // Personal PDF mode
+    if (norm(fields, "isPersonal") === "true") {
+      const html = `
+        <h1>Personal Spiritual Report</h1>
+        <p>${insights.synthesis?.summary}</p>
+      `;
+
+      const pdf = await generatePDFBufferFromHTML(html);
 
       if (email) {
-        await sendEmailHTML({
+        const emailResult = await sendEmailHTML({
           to: email,
           subject: "Your Personal Spiritual Report",
-          html: `<p>Your spiritual report is attached.</p>`,
-          attachments: [
-            {
-              filename: "spiritual-report.pdf",
-              type: "application/pdf",
-              content: pdfBuffer.toString("base64")
-            }
-          ]
+          html: "<p>Your PDF report is attached.</p>",
+          attachments: [{ filename: "spiritual-report.pdf", type: "application/pdf", content: pdf.toString("base64") }]
         });
+
+        if (!emailResult.ok) return res.status(500).json({ ok: false, error: "Email failed" });
       }
 
-      return res.status(200).json({
-        ok: true,
-        mode: "personal",
-        emailed: Boolean(email),
-        intent: safeIntent,
-        insights
-      });
+      return res.status(200).json({ ok: true, pdfEmailed: !!email });
     }
 
-    // TECHNICAL MODE → JSON only
-    return res.status(200).json({
-      ok: true,
-      mode: "technical",
-      emailed: false,
-      intent: safeIntent,
-      insights
-    });
-
+    // Technical mode
+    return res.status(200).json({ ok: true, insights });
   } catch (err) {
-    console.error("SPIRITUAL REPORT ERROR:", err);
+    console.error("Spiritual report error:", err);
     return res.status(500).json({ ok: false, error: err.message });
   }
 }
