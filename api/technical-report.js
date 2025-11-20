@@ -1,73 +1,58 @@
 // /api/technical-report.js
 import formidable from "formidable";
 import fs from "fs";
+
+import { applyCORS, validateUploadedFile, verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
 import { generateInsights } from "../lib/insights.js";
 import { generatePDFBufferFromHTML } from "../lib/pdf.js";
-import { verifyRecaptcha, sendEmailHTML, validateUploadedFile } from "../lib/utils.js";
 
 export const config = { api: { bodyParser: false } };
-
-// Unified CORS
-function applyCORS(req, res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  if (req.method === "OPTIONS") {
-    res.status(200).end();
-    return true;
-  }
-  return false;
-}
 
 export default async function handler(req, res) {
   if (applyCORS(req, res)) return;
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method Not Allowed" });
-  }
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method Not Allowed" });
 
   try {
-    const form = formidable({ keepExtensions: true });
-    const { fields, files } = await new Promise((resolve, reject) => {
-      form.parse(req, (err, f, fi) => (err ? reject(err) : resolve({ fields: f, files: fi })));
-    });
+    const form = formidable({ keepExtensions: true, allowEmptyFiles: true });
+    const { fields, files } = await new Promise((resolve, reject) =>
+      form.parse(req, (err, f, fi) => err ? reject(err) : resolve({ fields: f, files: fi }))
+    );
 
-    const question = String(fields.question || "").trim();
-    const email = String(fields.email || "").trim();
+    const email = fields.email;
+    const question = fields.question;
 
-    if (!question) return res.status(400).json({ ok: false, error: "Missing question" });
-    if (!email)    return res.status(400).json({ ok: false, error: "Missing email" });
-
-    const techFile = files?.techFile;
-    let buffer = null;
-
-    if (techFile?.filepath) {
-      const safe = validateUploadedFile(techFile);
-      if (!safe.ok) return res.status(400).json({ ok: false, error: safe.error });
-      buffer = fs.readFileSync(techFile.filepath);
-    }
+    if (!email) return res.status(400).json({ error: "Email required" });
+    if (!question) return res.status(400).json({ error: "Question required" });
 
     const insights = await generateInsights({
       question,
-      enginesInput: { palm: buffer ? { buffer } : null },
-      meta: { email }
+      meta: { email },
+      enginesInput: {}
     });
 
-    const html = generateTechnicalReportHTML(insights);
-    const pdf = await generatePDFBufferFromHTML(html);
+    const html = `
+      <h1>Technical Report</h1>
+      <pre>${JSON.stringify(insights, null, 2)}</pre>
+    `;
 
-    await sendEmailHTML({
+    const pdfBuffer = await generatePDFBufferFromHTML(html);
+
+    const emailResult = await sendEmailHTML({
       to: email,
       subject: "Your Technical Report",
-      html: "<p>Your technical PDF report is attached.</p>",
-      attachments: [
-        { filename: "technical-report.pdf", type: "application/pdf", content: pdf.toString("base64") }
-      ]
+      html: `<p>Your report is attached.</p>`,
+      attachments: [{ filename: "technical-report.pdf", content: pdfBuffer }]
     });
 
+    if (!emailResult.success)
+      return res.status(500).json({ error: "Email failed", detail: emailResult.error });
+
     return res.status(200).json({ ok: true });
+
   } catch (err) {
-    console.error("Technical report error:", err);
-    return res.status(500).json({ ok: false, error: err.message });
+    console.error("TECH REPORT ERROR:", err);
+    return res.status(500).json({ error: err.message });
   }
 }
