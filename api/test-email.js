@@ -1,4 +1,7 @@
 // /api/test-email.js
+//
+// https://answers-rust.vercel.app/api/test-email?email=henrycvalk@gmail.com
+
 import { applyCORS, sendEmailHTML } from "../lib/utils.js";
 
 export const config = {
