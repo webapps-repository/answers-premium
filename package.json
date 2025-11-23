@@ -11,6 +11,7 @@
     "build": "echo '✅ Build complete - Ready for Vercel deploy'"
   },
   "dependencies": {
+    "playwright": "^1.42.0",
     "@resvg/resvg-js": "^2.4.0",
     "astronomy-engine": "^2.1.19",
     "formidable": "^3.5.1",
@@ -21,6 +22,12 @@
     "resend": "^6.5.0",
     "satori": "^0.10.10",
     "yoga-wasm-web": "^0.3.0"
+  }
+  "scripts": {
+    "postinstall": "npx playwright install chromium"
+  },
+  "playwright": {
+    "browsers": ["chromium"]
   }
 }
 
