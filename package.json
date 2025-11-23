@@ -2,7 +2,7 @@
   "name": "answers",
   "version": "2.2.2",
   "type": "module",
-  "engines": { "node": "20.x" },
+  "engines": { "node": "22.x" },
 
   "scripts": {
     "build": "echo 'Build complete'",
