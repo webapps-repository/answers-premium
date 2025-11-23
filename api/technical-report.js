@@ -1,4 +1,10 @@
 // /api/technical-report.js
+// /api/technical-report.js
+// /api/technical-report.js
+// /api/technical-report.js
+// /api/technical-report.js
+// /api/technical-report.js
+
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
