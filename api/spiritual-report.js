@@ -1,4 +1,15 @@
 // /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
