@@ -1,8 +1,8 @@
 {
   "name": "answers",
-  "version": "2.1.1",
+  "version": "2.2.2",
   "type": "module",
-  "engines": { "node": "22.x" },
+  "engines": { "node": "20.x" },
 
   "scripts": {
     "build": "echo 'Build complete'",
@@ -10,8 +10,8 @@
   },
 
   "dependencies": {
-    "puppeteer-core": "^22.0.0",
-    "@sparticuz/chromium": "^119.0.0",
+    "puppeteer-core": "21.3.8",
+    "@sparticuz/chromium": "119.0.0",
     "@resvg/resvg-js": "^2.4.0",
     "astronomy-engine": "^2.1.19",
     "formidable": "^3.5.1",
