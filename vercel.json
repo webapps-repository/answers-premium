@@ -13,7 +13,7 @@
     }
   ],
   "env": {
-    "PLAYWRIGHT_BROWSERS_PATH": "0",
-    "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": "1024"
+    "AWS_LAMBDA_FUNCTION_MEMORY_SIZE": "1024",
+    "CHROMIUM_EXECUTABLE_PATH": "/var/task/node_modules/@sparticuz/chromium/bin/chromium"
   }
 }
