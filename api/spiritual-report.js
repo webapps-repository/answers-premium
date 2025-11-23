@@ -1,15 +1,4 @@
 // /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-// /api/spiritual-report.js
-
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
@@ -20,7 +9,6 @@ import formidable from "formidable";
 import {
   applyCORS,
   normalize,
-  validateUploadedFile,
   verifyRecaptcha,
   sendEmailHTML
 } from "../lib/utils.js";
@@ -41,15 +29,16 @@ export default async function handler(req, res) {
       form.parse(req, (err, f, fi) => err ? reject(err) : resolve({ fields: f, files: fi }))
     );
 
+    const email = normalize(fields, "email");
     const question = normalize(fields, "question");
-    if (!question) return res.status(400).json({ error: "Missing question" });
+    const isPersonal = normalize(fields, "isPersonal") === "true";
+
+    if (!email) return res.status(400).json({ error: "Email required" });
+    if (!question) return res.status(400).json({ error: "Question required" });
 
     const recaptchaToken = normalize(fields, "recaptchaToken");
     const captcha = await verifyRecaptcha(recaptchaToken);
     if (!captcha.ok) return res.status(400).json({ error: "Invalid reCAPTCHA" });
-
-    const isPersonal = normalize(fields, "isPersonal") === "true";
-    const email = normalize(fields, "email");
 
     let palm = null;
     if (files.palmImage?.filepath) {
@@ -77,27 +66,29 @@ export default async function handler(req, res) {
       enginesInput
     });
 
-    // ✨ Generate PDF
-    const pdfHTML = `
-      <h1>Spiritual Report</h1>
+    // Generate PDF HTML for Resend
+    const pdfHtml = await generatePDFBufferFromHTML(`
+      <h1>Your Spiritual Report</h1>
       <pre>${JSON.stringify(insights, null, 2)}</pre>
-    `;
+    `);
 
-    const pdfBuffer = await generatePDFBufferFromHTML(pdfHTML);
-
-    // ✉ Send
+    // Send email — THIS is the updated part
     await sendEmailHTML({
       to: email,
-      subject: "Your Spiritual Report",
+      subject: "Your Personal Spiritual Report",
       html: `<p>Your full report is attached.</p>`,
       attachments: [
-        { filename: "spiritual-report.pdf", content: pdfBuffer }
+        {
+          filename: "spiritual-report.pdf",
+          content: pdfHtml,
+          type: "text/html",
+          disposition: "inline"
+        }
       ]
     });
 
     return res.status(200).json({
       ok: true,
-      mode: isPersonal ? "personal" : "technical",
       shortAnswer: insights.shortAnswer,
       insights
     });
