@@ -1,15 +1,11 @@
-// /api/detailed-report.js — FIXED FULL VERSION
-// /api/detailed-report.js — FIXED FULL VERSION
-// /api/detailed-report.js — FIXED FULL VERSION
-// /api/detailed-report.js — FIXED FULL VERSION
-// /api/detailed-report.js — FIXED FULL VERSION
-
+// /api/detailed-report.js
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
 };
 
 import formidable from "formidable";
+
 import {
   applyCORS,
   normalize,
@@ -29,7 +25,7 @@ export default async function handler(req, res) {
   try {
     const form = formidable({ keepExtensions: true });
     const { fields } = await new Promise((resolve, reject) =>
-      form.parse(req, (err, f, fi) => err ? reject(err) : resolve({ fields: f }))
+      form.parse(req, (err, f) => err ? reject(err) : resolve({ fields: f }))
     );
 
     const email = normalize(fields, "email");
@@ -38,36 +34,36 @@ export default async function handler(req, res) {
     if (!email) return res.status(400).json({ error: "Email required" });
     if (!question) return res.status(400).json({ error: "Question required" });
 
-    const token = normalize(fields, "recaptchaToken");
-    const captcha = await verifyRecaptcha(token);
-    if (!captcha.ok) return res.status(400).json({ error: "Invalid reCAPTCHA" });
+    const recaptchaToken = normalize(fields, "recaptchaToken");
+    const recaptcha = await verifyRecaptcha(recaptchaToken);
+    if (!recaptcha.ok) return res.status(400).json({ error: "Invalid reCAPTCHA" });
 
     const insights = await generateInsights({
       question,
-      enginesInput: {} // technical mode
+      enginesInput: {}
     });
 
-    const html = `
-      <h1>Technical Report</h1>
+    const pdfHTML = `
+      <h1>Detailed Technical Report</h1>
       <pre>${JSON.stringify(insights, null, 2)}</pre>
     `;
 
-    const pdfBuffer = await generatePDFBufferFromHTML(html);
+    const pdfBuffer = await generatePDFBufferFromHTML(pdfHTML);
 
-    const result = await sendEmailHTML({
+    const emailResult = await sendEmailHTML({
       to: email,
       subject: "Your Detailed Technical Report",
-      html: "<p>Your technical PDF report is attached.</p>",
-      attachments: [{ filename: "technical-report.pdf", content: pdfBuffer }]
+      html: `<p>Your report is attached.</p>`,
+      attachments: [{ filename: "report.pdf", content: pdfBuffer }]
     });
 
-    if (!result.success)
-      return res.status(500).json({ error: "Email failed", detail: result.error });
+    if (!emailResult.success)
+      return res.status(500).json({ error: "Email failed", detail: emailResult.error });
 
-    return res.status(200).json({ ok: true, emailed: true });
+    return res.status(200).json({ ok: true });
 
   } catch (err) {
     console.error("DETAIL ERROR:", err);
-    return res.status(500).json({ error: "Server error", detail: err.message });
+    return res.status(500).json({ error: "Server error" });
   }
 }
