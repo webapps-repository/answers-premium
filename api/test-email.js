@@ -1,9 +1,5 @@
 // /api/test-email.js
 // /api/test-email.js
-// /api/test-email.js
-// /api/test-email.js
-// /api/test-email.js
-// /api/test-email.js
 //
 // https://answers-rust.vercel.app/api/test-email?email=henrycvalk@gmail.com
 
