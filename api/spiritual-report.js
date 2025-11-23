@@ -1,4 +1,9 @@
 // /api/spiritual-report.js — FIXED FULL VERSION
+// /api/spiritual-report.js — FIXED FULL VERSION
+// /api/spiritual-report.js — FIXED FULL VERSION
+// /api/spiritual-report.js — FIXED FULL VERSION
+// /api/spiritual-report.js — FIXED FULL VERSION
+
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
