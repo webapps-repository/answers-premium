@@ -1,17 +1,17 @@
 {
   "name": "answers",
-  "version": "2.2.0",
+  "version": "2.1.1",
   "type": "module",
-  "engines": {
-    "node": "22.x"
-  },
+  "engines": { "node": "22.x" },
+
   "scripts": {
     "build": "echo 'Build complete'",
     "start": "node api/spiritual-report.js"
   },
+
   "dependencies": {
     "@sparticuz/chromium": "^119.0.0",
-    "puppeteer-core": "^22.6.4",
+    "puppeteer-core": "^22.6.1",
     "@resvg/resvg-js": "^2.4.0",
     "astronomy-engine": "^2.1.19",
     "formidable": "^3.5.1",
@@ -24,5 +24,4 @@
     "yoga-wasm-web": "^0.3.0"
   }
 }
-
 
