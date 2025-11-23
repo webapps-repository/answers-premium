@@ -1,10 +1,4 @@
 // /api/technical-report.js
-// /api/technical-report.js
-// /api/technical-report.js
-// /api/technical-report.js
-// /api/technical-report.js
-// /api/technical-report.js
-
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
@@ -49,28 +43,32 @@ export default async function handler(req, res) {
 
     const insights = await generateInsights({
       question,
-      meta: { email },
       enginesInput: {}
     });
 
-    const pdfHTML = `
+    const pdfHtml = await generatePDFBufferFromHTML(`
       <h1>Technical Report</h1>
       <pre>${JSON.stringify(insights, null, 2)}</pre>
-    `;
-
-    const pdfBuffer = await generatePDFBufferFromHTML(pdfHTML);
+    `);
 
     const emailResult = await sendEmailHTML({
       to: email,
       subject: "Your Technical Report",
       html: `<p>Your report is attached.</p>`,
-      attachments: [{ filename: "technical-report.pdf", content: pdfBuffer }]
+      attachments: [
+        {
+          filename: "technical-report.pdf",
+          content: pdfHtml,
+          type: "text/html",
+          disposition: "inline"
+        }
+      ]
     });
 
     if (!emailResult.success)
       return res.status(500).json({ error: "Email failed", detail: emailResult.error });
 
-    return res.status(200).json({ ok: true, emailed: true });
+    return res.status(200).json({ ok: true });
 
   } catch (err) {
     console.error("TECH REPORT ERROR:", err);
