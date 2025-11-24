@@ -1,4 +1,5 @@
-// /api/detailed-report.js
+// /api/detailed-report.js — Stage-3 (HTML email only)
+
 export const config = {
   api: { bodyParser: false },
   runtime: "nodejs"
@@ -10,11 +11,10 @@ import {
   applyCORS,
   normalize,
   verifyRecaptcha,
-  sendEmailHTML
+  sendHtmlEmail
 } from "../lib/utils.js";
 
 import { generateInsights } from "../lib/insights.js";
-import { generatePDFBufferFromHTML } from "../lib/pdf.js";
 
 export default async function handler(req, res) {
   if (applyCORS(req, res)) return;
@@ -40,35 +40,30 @@ export default async function handler(req, res) {
 
     const insights = await generateInsights({
       question,
-      enginesInput: {}  // technical mode only
+      enginesInput: {} // technical mode (no personal engines)
     });
 
-    const pdfHtml = await generatePDFBufferFromHTML(`
-      <h1>Technical Report</h1>
+    const subject = `Full Technical Insight — ${new Date().toLocaleString()}`;
+
+    const html = `
+      <h1>Your Full Technical Report</h1>
+      <p>Below are your detailed insights:</p>
       <pre>${JSON.stringify(insights, null, 2)}</pre>
-    `);
+    `;
 
-    const emailResult = await sendEmailHTML({
+    const sent = await sendHtmlEmail({
       to: email,
-      subject: "Your Detailed Technical Report",
-      html: `<p>Your report is attached.</p>`,
-      attachments: [
-        {
-          filename: "technical-report.pdf",
-          content: pdfHtml,
-          type: "text/html",
-          disposition: "inline"
-        }
-      ]
+      subject,
+      html
     });
 
-    if (!emailResult.success)
-      return res.status(500).json({ error: "Email failed", detail: emailResult.error });
+    if (!sent.success)
+      return res.status(500).json({ ok: false, error: sent.error });
 
-    return res.status(200).json({ ok: true });
+    return res.status(200).json({ ok: true, emailed: true });
 
   } catch (err) {
-    console.error("DETAIL ERROR:", err);
+    console.error("DETAIL REPORT ERROR:", err);
     return res.status(500).json({ error: "Server error" });
   }
 }
