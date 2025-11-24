@@ -1,4 +1,7 @@
 // /api/technical-report.js — Stage-3 (HTML-only full technical email)
+export const runtime = "nodejs";             // REQUIRED for formidable + email + env vars
+export const dynamic = "force-dynamic";      // Prevent Vercel caching of POST requests
+export const config = { api: { bodyParser: false } };
 
 import formidable from "formidable";
 import {
@@ -8,15 +11,11 @@ import {
 } from "../lib/utils.js";
 import { generateInsights } from "../lib/insights.js";
 
-export const config = {
-  api: { bodyParser: false }
-};
-
 export default async function handler(req, res) {
   /* ----------------------------------------------------------
      CORS — MUST execute before anything else
   ---------------------------------------------------------- */
-  res.setHeader("Access-Control-Allow-Origin", "*"); // lock to Shopify when ready
+  res.setHeader("Access-Control-Allow-Origin", "*"); // lock to Shopify later
   res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
@@ -24,16 +23,15 @@ export default async function handler(req, res) {
     "Content-Type, Authorization, X-Requested-With, Accept, Origin"
   );
 
-  if (req.method === "OPTIONS") {
+  if (req.method === "OPTIONS")
     return res.status(200).end();
-  }
 
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Method Not Allowed" });
-  }
 
   /* ----------------------------------------------------------
      Parse multipart form-data
+     (Edge runtime would break this — Node runtime REQUIRED)
   ---------------------------------------------------------- */
   let fields;
   try {
@@ -60,10 +58,13 @@ export default async function handler(req, res) {
   if (!question) return res.status(400).json({ error: "Question required" });
 
   /* ----------------------------------------------------------
-     Verify reCAPTCHA (optional for technical mode)
+     Verify reCAPTCHA (optional mode)
   ---------------------------------------------------------- */
   if (recaptchaToken) {
-    const rec = await verifyRecaptcha(recaptchaToken, req.headers["x-forwarded-for"]);
+    const rec = await verifyRecaptcha(
+      recaptchaToken,
+      req.headers["x-forwarded-for"]
+    );
     if (!rec.ok)
       return res.status(400).json({ error: "Invalid reCAPTCHA", rec });
   }
@@ -75,7 +76,7 @@ export default async function handler(req, res) {
   try {
     insights = await generateInsights({
       question,
-      enginesInput: {} // technical = no personal astrology/numerology engine
+      enginesInput: {}  // technical mode → no personal engines
     });
   } catch (err) {
     console.error("❌ Insight generation error:", err);
@@ -83,7 +84,7 @@ export default async function handler(req, res) {
   }
 
   /* ----------------------------------------------------------
-     Build HTML email (simple + clean)
+     Build HTML email
   ---------------------------------------------------------- */
   const subject = `Your Technical Report — ${new Date().toLocaleString()}`;
 
