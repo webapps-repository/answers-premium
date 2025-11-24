@@ -6,6 +6,21 @@ import { classifyQuestion } from "../lib/ai.js";
 import { runAllEngines } from "../lib/engines.js";
 import { buildSummaryHTML, buildPersonalEmailHTML } from "../lib/insights.js";
 
+export default async function handler(req, res) {
+  // ----------------------------
+  // 0) GLOBAL CORS (ALWAYS FIRST)
+  // ----------------------------
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+  );
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+  
 export const config = {
   api: { bodyParser: false }
 };
