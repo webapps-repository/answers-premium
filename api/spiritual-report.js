@@ -18,21 +18,29 @@ import {
 } from "../lib/insights.js";
 
 export default async function handler(req, res) {
-  // CORS
-  res.setHeader("Access-Control-Allow-Origin", "*");
+  /* ----------------------------------------------------------
+     SHOPIFY-SAFE CORS (critical)
+  ---------------------------------------------------------- */
+  const origin = req.headers.origin;
+  res.setHeader("Access-Control-Allow-Origin", origin || "*");
+  res.setHeader("Vary", "Origin");                          // 🔥 REQUIRED FOR VERCEL + SHOPIFY
+  res.setHeader("Access-Control-Allow-Credentials", "true");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Requested-With, Accept, Origin"
   );
+
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
-  // Parse form
+  /* ----------------------------------------------------------
+     Parse multipart/form-data
+  ---------------------------------------------------------- */
   const form = formidable({ multiples: false, maxFileSize: 12 * 1024 * 1024 });
-  let fields, files;
 
+  let fields, files;
   try {
     ({ fields, files } = await new Promise((resolve, reject) =>
       form.parse(req, (err, f, fl) =>
@@ -40,14 +48,13 @@ export default async function handler(req, res) {
       )
     ));
   } catch (err) {
-    console.error("PARSE ERROR:", err);
+    console.error("❌ PARSE ERROR:", err);
     return res.status(400).json({ error: "Bad form data" });
   }
 
-  console.log("FIELDS:", JSON.stringify(fields));
-  console.log("FILES:", JSON.stringify(files));
-
-  // Extract (robust)
+  /* ----------------------------------------------------------
+     Extract & validate all fields
+  ---------------------------------------------------------- */
   const question = normalize(fields, "question");
   const email = normalize(fields, "email");
   const fullName = normalize(fields, "fullName");
@@ -55,7 +62,6 @@ export default async function handler(req, res) {
   const birthTime = normalize(fields, "birthTime");
   const birthPlace = normalize(fields, "birthPlace");
 
-  // recaptcha
   const recaptchaToken =
     normalize(fields, "recaptchaToken") ||
     normalize(fields, "g-recaptcha-response") ||
@@ -67,21 +73,28 @@ export default async function handler(req, res) {
   if (!question) return res.status(400).json({ error: "Missing question" });
   if (!email) return res.status(400).json({ error: "Missing email" });
 
-  // verify recaptcha
+  /* ----------------------------------------------------------
+     reCAPTCHA
+  ---------------------------------------------------------- */
   const rec = await verifyRecaptcha(recaptchaToken, req.headers["x-forwarded-for"]);
   if (!rec.ok) {
-    console.error("RECAPTCHA FAIL:", rec);
+    console.error("❌ RECAPTCHA FAIL:", rec);
     return res.status(400).json({ error: "reCAPTCHA failed", rec });
   }
 
-  // Optional file
+  /* ----------------------------------------------------------
+     Optional file
+  ---------------------------------------------------------- */
   const uploadedFile = files?.technicalFile || files?.palmImage || null;
+
   if (uploadedFile) {
     const valid = validateUploadedFile(uploadedFile);
     if (!valid.ok) return res.status(400).json({ error: valid.error });
   }
 
-  // classification
+  /* ----------------------------------------------------------
+     Classification (still needed for summary box)
+  ---------------------------------------------------------- */
   let cls;
   try {
     cls = await classifyQuestion(question);
@@ -89,7 +102,9 @@ export default async function handler(req, res) {
     cls = { type: "personal", confidence: 0.5 };
   }
 
-  // engines
+  /* ----------------------------------------------------------
+     Run all engines in personal mode
+  ---------------------------------------------------------- */
   let enginesOut;
   try {
     enginesOut = await runAllEngines({
@@ -98,18 +113,22 @@ export default async function handler(req, res) {
       uploadedFile
     });
   } catch (err) {
-    console.error("ENGINE ERROR:", err);
+    console.error("❌ ENGINE ERROR:", err);
     return res.status(500).json({ error: "Engine failure" });
   }
 
-  // short answer
+  /* ----------------------------------------------------------
+     Short summary (web display)
+  ---------------------------------------------------------- */
   const shortHTML = buildSummaryHTML({
     classification: cls,
     engines: enginesOut,
     question
   });
 
-  // long email
+  /* ----------------------------------------------------------
+     Long HTML email (Apple-style)
+  ---------------------------------------------------------- */
   const longHTML = buildUniversalEmailHTML({
     title: "Your Personal Insight Report",
     question,
@@ -120,12 +139,23 @@ export default async function handler(req, res) {
     birthPlace
   });
 
-  await sendEmailHTML({
+  /* ----------------------------------------------------------
+     Email the long report
+  ---------------------------------------------------------- */
+  const mail = await sendEmailHTML({
     to: email,
     subject: "Your Personal Insight Report",
     html: longHTML
   });
 
+  if (!mail.success) {
+    console.error("❌ EMAIL ERROR:", mail.error);
+    return res.status(500).json({ error: "Email failed" });
+  }
+
+  /* ----------------------------------------------------------
+     Success response
+  ---------------------------------------------------------- */
   return res.json({
     ok: true,
     mode: "personal",
