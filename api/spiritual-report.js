@@ -14,66 +14,77 @@ import { classifyQuestion } from "../lib/ai.js";
 import { runAllEngines } from "../lib/engines.js";
 import {
   buildSummaryHTML,
-  buildPersonalEmailHTML
+  buildUniversalEmailHTML
 } from "../lib/insights.js";
 
 export default async function handler(req, res) {
-
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers","Content-Type, Authorization, X-Requested-With, Accept, Origin");
-
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+  );
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
 
-  // Parse form-data
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Method not allowed" });
+
+  // Parse form
+  const form = formidable({ multiples: false, maxFileSize: 12 * 1024 * 1024 });
   let fields, files;
+
   try {
-    const form = formidable({ multiples: false, maxFileSize: 12 * 1024 * 1024 });
     ({ fields, files } = await new Promise((resolve, reject) =>
       form.parse(req, (err, f, fl) =>
         err ? reject(err) : resolve({ fields: f, files: fl })
       )
     ));
   } catch (err) {
-    console.error("Form parse error:", err);
     return res.status(400).json({ error: "Bad form data" });
   }
 
-  // Required inputs
+  // Extract
   const question = normalize(fields, "question");
   const email = normalize(fields, "email");
+  const fullName = normalize(fields, "fullName");
+  const birthDate = normalize(fields, "birthDate");
+  const birthTime = normalize(fields, "birthTime");
+  const birthPlace = normalize(fields, "birthPlace");
 
-  if (!email) return res.status(400).json({ error: "Missing email" });
-  if (!question) return res.status(400).json({ error: "Missing question" });
-
-  // Mandatory recaptcha
   const recaptchaToken =
     normalize(fields, "recaptchaToken") ||
     normalize(fields, "g-recaptcha-response") ||
-    normalize(fields, "g-recaptcha-response[]") ||
-    normalize(fields, "token") ||
-    normalize(fields, "captcha") ||
-    normalize(fields, "recaptcha") ||
-    normalize(fields, "h-captcha-response");
+    normalize(fields, "token");
 
+  if (!question) return res.status(400).json({ error: "Missing question" });
+  if (!email) return res.status(400).json({ error: "Missing email" });
+
+  // Verify recaptcha
   const rec = await verifyRecaptcha(recaptchaToken, req.headers["x-forwarded-for"]);
-  if (!rec.ok) return res.status(400).json({ error: "Recaptcha failed", rec });
+  if (!rec.ok) return res.status(400).json({ error: "reCAPTCHA failed", rec });
 
-  // Classification + engine run
-  let cls = await classifyQuestion(question);
-  let uploadedFile = files?.technicalFile || files?.palmImage || null;
-
+  // Optional file
+  const uploadedFile = files?.technicalFile || files?.palmImage || null;
   if (uploadedFile) {
     const valid = validateUploadedFile(uploadedFile);
     if (!valid.ok) return res.status(400).json({ error: valid.error });
   }
 
+  // Classification
+  let cls;
+  try {
+    cls = await classifyQuestion(question);
+  } catch {
+    cls = { type: "personal", confidence: 0.5 };
+  }
+
+  // Run engines
   let enginesOut;
   try {
     enginesOut = await runAllEngines({
       question,
-      mode: cls.type,
+      mode: "personal",
       uploadedFile
     });
   } catch (err) {
@@ -81,27 +92,32 @@ export default async function handler(req, res) {
   }
 
   // Short answer
-  const shortHTML = buildSummaryHTML({ classification: cls, engines: enginesOut, question });
+  const shortHTML = buildSummaryHTML({
+    classification: cls,
+    engines: enginesOut,
+    question
+  });
 
-  // Full email (always sent)
-  const fullHTML = buildPersonalEmailHTML({
+  // Long answer → email
+  const longHTML = buildUniversalEmailHTML({
+    title: "Your Personal Insight Report",
     question,
     engines: enginesOut,
-    fullName: normalize(fields, "fullName"),
-    birthDate: normalize(fields, "birthDate"),
-    birthTime: normalize(fields, "birthTime"),
-    birthPlace: normalize(fields, "birthPlace"),
+    fullName,
+    birthDate,
+    birthTime,
+    birthPlace
   });
 
   await sendEmailHTML({
     to: email,
-    subject: "Your AI Insight Report",
-    html: fullHTML
+    subject: "Your Personal Insight Report",
+    html: longHTML
   });
 
   return res.json({
     ok: true,
-    shortAnswer: shortHTML,
-    emailSent: true
+    mode: "personal",
+    shortAnswer: shortHTML
   });
 }
