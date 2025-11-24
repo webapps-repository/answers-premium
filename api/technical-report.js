@@ -52,7 +52,15 @@ export default async function handler(req, res) {
   ---------------------------------------------------------- */
   const email = normalize(fields, "email");
   const question = normalize(fields, "question");
-  const recaptchaToken = normalize(fields, "recaptchaToken");
+  // 🔥 MULTI-TOKEN FIX (supports all V2 field names)
+  const recaptchaToken =
+    normalize(fields, "recaptchaToken") ||
+    normalize(fields, "g-recaptcha-response") ||
+    normalize(fields, "g-recaptcha-response[]") ||
+    normalize(fields, "token") ||
+    normalize(fields, "captcha") ||
+    normalize(fields, "recaptcha") ||
+    normalize(fields, "h-captcha-response");
 
   if (!email) return res.status(400).json({ error: "Email required" });
   if (!question) return res.status(400).json({ error: "Question required" });
