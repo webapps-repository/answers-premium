@@ -1,7 +1,7 @@
 // /api/spiritual-report.js — Stage-3 (HTML-only, Clean Output)
 
 import formidable from "formidable";
-import { applyCORS, normalize, validateUploadedFile, verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
+import { normalize, validateUploadedFile, verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
 import { classifyQuestion } from "../lib/ai.js";
 import { runAllEngines } from "../lib/engines.js";
 import { buildSummaryHTML, buildPersonalEmailHTML } from "../lib/insights.js";
@@ -57,7 +57,7 @@ export default async function handler(req, res) {
      Normalize inputs
   ---------------------------------------------------------- */
   const question = normalize(fields, "question");
-  const isPersonal = normalize(fields, "isPersonal") === "true";
+  const isPersonal = String(normalize(fields, "isPersonal")).toLowerCase() === "true";
   const recaptchaToken = normalize(fields, "recaptchaToken");
 
   if (!question)
