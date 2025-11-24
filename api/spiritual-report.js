@@ -6,11 +6,14 @@ import { classifyQuestion } from "../lib/ai.js";
 import { runAllEngines } from "../lib/engines.js";
 import { buildSummaryHTML, buildPersonalEmailHTML } from "../lib/insights.js";
 
+export const config = { api: { bodyParser: false } };
+
 export default async function handler(req, res) {
-  // ----------------------------
-  // 0) GLOBAL CORS (ALWAYS FIRST)
-  // ----------------------------
-  res.setHeader("Access-Control-Allow-Origin", "*");
+
+  // ----------------------------------------
+  // 0) CORS — MUST COME BEFORE ANYTHING ELSE
+  // ----------------------------------------
+  res.setHeader("Access-Control-Allow-Origin", "*"); // lock to Shopify domain later
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
@@ -20,18 +23,14 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
-  
-export const config = {
-  api: { bodyParser: false }
-};
 
-export default async function handler(req, res) {
-  // CORS preflight
-  if (applyCORS(req, res)) return;
+  if (req.method === "GET") {
+    return res.status(200).json({ success: true, message: "OK" });
+  }
 
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
-
+  if (req.method !== "POST") {
+    return res.status(405).json({ success: false, error: "Method not allowed" });
+  }
   /* ----------------------------------------------------------
      Parse multipart form-data
   ---------------------------------------------------------- */
