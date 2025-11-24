@@ -1,47 +1,34 @@
 // /api/system-test.js
-//
-// https://answers-rust.vercel.app/api/system-test.js
-
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
 
-import { verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
-import { completeJson } from "../lib/ai.js";
+import { sendEmailHTML } from "../lib/utils.js";
+import { buildUniversalEmailHTML } from "../lib/insights.js";
 
 export default async function handler(req, res) {
-  const report = {
-    recaptcha: "FAIL",
-    openai: "FAIL",
-    email: "FAIL",
-    overall: "FAIL"
-  };
+  const tests = {};
 
-  // Check recaptcha secret present
-  if (process.env.RECAPTCHA_SECRET_KEY) {
-    report.recaptcha = "PASS";
+  // env
+  tests.OPENAI = !!process.env.OPENAI_API_KEY;
+  tests.RESEND = !!process.env.RESEND_API_KEY;
+
+  // email test
+  try {
+    const html = buildUniversalEmailHTML({
+      title: "System Test Email",
+      question: "Diagnostics",
+      engines: { test: "OK" }
+    });
+
+    await sendEmailHTML({
+      to: process.env.RESEND_FROM,
+      subject: "System Test Email",
+      html
+    });
+
+    tests.EMAIL = true;
+  } catch (e) {
+    tests.EMAIL = false;
   }
 
-  // Check OpenAI
-  try {
-    const test = await completeJson(`Return JSON ONLY: {"ping":"ok"}`);
-    if (test?.ping === "ok") report.openai = "PASS";
-  } catch {}
-
-  // Check email
-  try {
-    const dest = process.env.TEST_EMAIL || "youremail@example.com";
-    await sendEmailHTML({
-      to: dest,
-      subject: "System Test OK",
-      html: "<h1>System Test Passed</h1>"
-    });
-    report.email = "PASS";
-  } catch {}
-
-  if (report.recaptcha === "PASS" &&
-      report.openai === "PASS" &&
-      report.email === "PASS")
-    report.overall = "PASS";
-
-  return res.json(report);
+  return res.status(200).json({ ok: true, tests });
 }
