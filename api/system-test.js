@@ -3,78 +3,191 @@
 // https://answers-rust.vercel.app/api/system-test.js
 // https://answers-rust.vercel.app/api/system-test.js?token=TEST
 // https://answers-rust.vercel.app/api/system-test.js?token=YOUR_TOKEN
+// https://answers-rust.vercel.app/api/system-test.js?token=TEST123
 
-// /api/system-test.js
+// /api/system-test.js — FULL DEBUG MODE
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { verifyRecaptcha } from "../lib/utils.js";
+import formidable from "formidable";
+import { verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
+import { runAllEngines } from "../lib/engines.js";
+import OpenAI from "openai";
 
 export default async function handler(req, res) {
+  const start = Date.now();
+  const method = req.method;
+
+  /* -------------------------------------------
+     CORS
+  ------------------------------------------- */
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+  );
+  if (method === "OPTIONS")
+    return res.status(200).json({ ok: true, msg: "CORS OK" });
+
+  /* -------------------------------------------
+     GATHER DEBUG INFO
+  ------------------------------------------- */
+  const IP =
+    req.headers["x-forwarded-for"] ||
+    req.connection?.remoteAddress ||
+    "unknown";
+
   const token =
     req.query.token ||
     req.body?.token ||
-    req.query?.recaptchaToken ||
     req.body?.recaptchaToken ||
     null;
 
-  // ENV checks
   const ENV = {
     RECAPTCHA_SECRET_PRESENT: !!process.env.RECAPTCHA_SECRET_KEY,
+    OPENAI_API_KEY_PRESENT: !!process.env.OPENAI_API_KEY,
     RESEND_API_KEY_PRESENT: !!process.env.RESEND_API_KEY,
-    OPENAI_API_KEY_PRESENT: !!process.env.OPENAI_API_KEY
   };
 
-  // ⬇ Recaptcha diagnostic structure
   const RECAPTCHA = {
     TOKEN_RECEIVED: token,
-    RAW: null,
-    OK: false,
-    ERROR_CODES: [],
-    IP_USED: null
+    raw: null,
+    ok: false,
+    error: null,
+    ip: IP
   };
 
-  // If no token supplied — return instructions
-  if (!token) {
-    return res.json({
-      ok: true,
-      message: "Append ?token=YOUR_RECAPTCHA_TOKEN to this URL",
-      example:
-        "https://answers-rust.vercel.app/api/system-test.js?token=PASTE_HERE",
+  const OPENAI_TEST = {
+    ok: false,
+    error: null,
+    response: null
+  };
 
-      tests: {
-        TOKEN_PRESENT: false,
-        ENV
-      }
-    });
-  }
+  const EMAIL_TEST = {
+    ok: false,
+    error: null
+  };
 
-  // Determine IP — Vercel correct logic
-  const ip =
-    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket?.remoteAddress;
-  RECAPTCHA.IP_USED = ip;
+  const ENGINE_TEST = {
+    ok: false,
+    error: null,
+    output: null
+  };
 
-  // 🔥 Perform reCAPTCHA validation
-  try {
-    const result = await verifyRecaptcha(token, ip);
+  const FORM_PARSE = {
+    ok: false,
+    error: null,
+    fields: null,
+    files: null
+  };
 
-    RECAPTCHA.RAW = result.raw || result;
-    RECAPTCHA.OK = !!result.ok;
-
-    if (result?.raw?.["error-codes"]) {
-      RECAPTCHA.ERROR_CODES = result.raw["error-codes"];
+  /* -------------------------------------------
+     FORM PARSER TEST (POST ONLY)
+  ------------------------------------------- */
+  if (method === "POST") {
+    try {
+      const form = formidable({ multiples: false });
+      const { fields, files } = await new Promise((resolve, reject) =>
+        form.parse(req, (err, f, fl) =>
+          err ? reject(err) : resolve({ fields: f, files: fl })
+        )
+      );
+      FORM_PARSE.ok = true;
+      FORM_PARSE.fields = fields;
+      FORM_PARSE.files = files;
+    } catch (err) {
+      FORM_PARSE.error = String(err);
     }
-
-  } catch (err) {
-    RECAPTCHA.RAW = { error: String(err) };
   }
 
-  // Final output
+  /* -------------------------------------------
+     RECAPTCHA TEST
+  ------------------------------------------- */
+  if (token) {
+    try {
+      const result = await verifyRecaptcha(token, IP);
+      RECAPTCHA.raw = result.raw || result;
+      RECAPTCHA.ok = result.ok || false;
+
+      if (!RECAPTCHA.ok) RECAPTCHA.error = result.raw;
+    } catch (err) {
+      RECAPTCHA.error = String(err);
+    }
+  } else {
+    RECAPTCHA.error = "No token provided";
+  }
+
+  /* -------------------------------------------
+     OPENAI TEST
+  ------------------------------------------- */
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+      const ai = await client.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [{ role: "user", content: "ping" }]
+      });
+
+      OPENAI_TEST.ok = true;
+      OPENAI_TEST.response = ai.choices?.[0]?.message?.content || null;
+    } catch (err) {
+      OPENAI_TEST.error = String(err);
+    }
+  }
+
+  /* -------------------------------------------
+     EMAIL TEST (dry run)
+  ------------------------------------------- */
+  if (process.env.RESEND_API_KEY) {
+    try {
+      await sendEmailHTML({
+        to: "noreply@example.com",
+        subject: "Test Email (Dry Run)",
+        html: "<p>This is a system test.</p>",
+        dryRun: true
+      });
+
+      EMAIL_TEST.ok = true;
+    } catch (err) {
+      EMAIL_TEST.error = String(err);
+    }
+  }
+
+  /* -------------------------------------------
+     ENGINE TEST
+  ------------------------------------------- */
+  try {
+    const out = await runAllEngines({
+      question: "test",
+      mode: "technical",
+      uploadedFile: null
+    });
+
+    ENGINE_TEST.ok = true;
+    ENGINE_TEST.output = out;
+  } catch (err) {
+    ENGINE_TEST.error = String(err);
+  }
+
+  /* -------------------------------------------
+     FINAL RESPONSE
+  ------------------------------------------- */
   return res.json({
     ok: true,
-    tests: {
-      TOKEN_PRESENT: true,
-      RECAPTCHA,
-      ENV
-    }
+    time_ms: Date.now() - start,
+    method,
+    IP,
+    ENV,
+    TOKEN_PRESENT: !!token,
+
+    RECAPTCHA,
+    OPENAI_TEST,
+    EMAIL_TEST,
+    ENGINE_TEST,
+    FORM_PARSE,
+
+    headers: req.headers
   });
 }
