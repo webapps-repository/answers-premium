@@ -90,7 +90,7 @@
     </div>
 
     <div class="field">
-      <div id="recaptcha-box"></div>
+      <div id="recaptcha-box" style="min-height: 40px;"></div>
     </div>
 
     <button id="get-btn" class="btn">Get Answer</button>
@@ -108,7 +108,7 @@
 
 </div>
 
-<script src="https://www.google.com/recaptcha/api.js?onload=onLoadRecaptcha&render=explicit" async defer></script>
+<script src="https://www.google.com/recaptcha/api.js?render=6LfTYRcsAAAAADwIcyRkQ9mkyJXIYuaRavmT8D-f"></script>
 
 <script>
 /* ================================
@@ -117,18 +117,23 @@
 const API_SPIRITUAL = "https://answers-rust.vercel.app/api/spiritual-report";
 const API_TECHNICAL = "https://answers-rust.vercel.app/api/technical-report";
 
-let recaptchaId = null;
+let recaptchaToken = null;
 
-/* =================================
-   INIT RECAPTCHA
-================================= */
-function onLoadRecaptcha() {
-  recaptchaId = grecaptcha.render("recaptcha-box", {
-    sitekey: "6LdAOgYsAAAAAFgNlxLkahtIAbZc4XcIJt2hfLsj"
-  });
+/* ======================================================
+   INVISIBLE v2 — AUTO MODE (NO MANUAL RENDER REQUIRED)
+====================================================== */
+function getRecaptchaToken() {
+  return grecaptcha.execute("6LfTYRcsAAAAADwIcyRkQ9mkyJXIYuaRavmT8D-f", { action: "submit" })
+    .then(token => {
+      console.log("INVISIBLE TOKEN:", token);
+      recaptchaToken = token;
+      return token;
+    });
 }
 
-/* ================================= */
+/* =================================
+   ELEMENTS
+================================= */
 const isPersonalBox = document.getElementById("isPersonal");
 const personalFields = document.getElementById("personal-fields");
 const technicalField = document.getElementById("technical-field");
@@ -147,13 +152,8 @@ const summaryText = document.getElementById("summary-text");
    MODE TOGGLE
 ================================= */
 isPersonalBox.addEventListener("change", () => {
-  if (isPersonalBox.checked) {
-    personalFields.style.display = "block";
-    technicalField.style.display = "none";
-  } else {
-    personalFields.style.display = "none";
-    technicalField.style.display = "block";
-  }
+  personalFields.style.display = isPersonalBox.checked ? "block" : "none";
+  technicalField.style.display = isPersonalBox.checked ? "none" : "block";
   summaryWrap.style.display = "none";
   statusText.textContent = "";
 });
@@ -164,12 +164,12 @@ isPersonalBox.addEventListener("change", () => {
 function progressStart() {
   progressInner.style.transition = "width 1.2s linear";
   progressInner.style.width = "40%";
-  setTimeout(() => progressInner.style.width = "80%", 1300);
+  setTimeout(() => (progressInner.style.width = "80%"), 1300);
 }
 
 function progressFinish() {
   progressInner.style.width = "100%";
-  setTimeout(() => progressInner.style.width = "0%", 900);
+  setTimeout(() => (progressInner.style.width = "0%"), 900);
 }
 
 /* =================================
@@ -178,28 +178,33 @@ function progressFinish() {
 document.getElementById("main-form").addEventListener("submit", async e => {
   e.preventDefault();
 
-  if (!emailEl.value) return alert("Email is required.");
-
-  const token = grecaptcha.getResponse(recaptchaId);
-  if (!token) return alert("Complete reCAPTCHA.");
+  if (!emailEl.value) return alert("Email required.");
+  if (!questionEl.value.trim()) return alert("Please enter a question.");
 
   spinner.style.display = "block";
   statusText.textContent = "Processing…";
   progressStart();
 
+  const token = await getRecaptchaToken();
+  submitForm(token);
+});
+
+/* =================================
+   SEND FORM TO BACKEND
+================================= */
+async function submitForm(token) {
   const fd = new FormData();
-  fd.append("email", emailEl.value.trim());
-  fd.append("question", questionEl.value.trim());
+  fd.append("email", emailEl.value);
+  fd.append("question", questionEl.value);
   fd.append("recaptchaToken", token);
 
-  let endpoint;
+  let endpoint = isPersonalBox.checked ? API_SPIRITUAL : API_TECHNICAL;
 
   if (isPersonalBox.checked) {
-    endpoint = API_SPIRITUAL;
-
-    fd.append("fullName", document.getElementById("fullName").value.trim());
+    fd.append("fullName", document.getElementById("fullName").value);
     fd.append("birthDate", document.getElementById("birthDate").value);
     fd.append("birthTime", document.getElementById("birthTime").value);
+
     fd.append(
       "birthPlace",
       [
@@ -213,24 +218,17 @@ document.getElementById("main-form").addEventListener("submit", async e => {
     if (palm) fd.append("palmImage", palm);
 
   } else {
-    endpoint = API_TECHNICAL;
-    if (technicalFile.files[0]) {
-      fd.append("technicalFile", technicalFile.files[0]);
-    }
+    if (technicalFile.files[0]) fd.append("technicalFile", technicalFile.files[0]);
   }
 
   let out;
   try {
-    const r = await fetch(endpoint, {
-      method:"POST",
-      body: fd,
-      mode: "cors",
-      credentials: "omit"
-    });
+    const r = await fetch(endpoint, { method: "POST", body: fd });
     out = await r.json();
   } catch (err) {
+    console.error(err);
     spinner.style.display = "none";
-    statusText.textContent = "Server error";
+    alert("Server error.");
     return;
   }
 
@@ -241,11 +239,8 @@ document.getElementById("main-form").addEventListener("submit", async e => {
   summaryWrap.style.display = "block";
 
   statusText.textContent = "Your full report has been emailed.";
-
   alert("Your full report has been emailed!");
-
-  grecaptcha.reset(recaptchaId);
-});
+}
 </script>
 
 </body>
