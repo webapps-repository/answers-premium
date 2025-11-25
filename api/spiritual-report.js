@@ -1,4 +1,4 @@
-// /api/spiritual-report.js — UPDATED WITH RECAPTCHA TOGGLE
+// /api/spiritual-report.js
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { api: { bodyParser: false } };
@@ -19,27 +19,30 @@ import {
 } from "../lib/insights.js";
 
 export default async function handler(req, res) {
+
   /* ----------------------------------------------------------
-     SHOPIFY-SAFE CORS
+     UNIVERSAL SAFE CORS (Shopify Compatible)
   ---------------------------------------------------------- */
-  const origin = req.headers.origin;
-  res.setHeader("Access-Control-Allow-Origin", origin || "*");
-  res.setHeader("Vary", "Origin");
-  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Origin", "*"); 
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Requested-With, Accept, Origin"
   );
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "OPTIONS")
+    return res.status(200).end();
+
   if (req.method !== "POST")
     return res.status(405).json({ error: "Method not allowed" });
 
   /* ----------------------------------------------------------
      Parse multipart/form-data
   ---------------------------------------------------------- */
-  const form = formidable({ multiples: false, maxFileSize: 12 * 1024 * 1024 });
+  const form = formidable({
+    multiples: false,
+    maxFileSize: 12 * 1024 * 1024
+  });
 
   let fields, files;
   try {
@@ -50,11 +53,11 @@ export default async function handler(req, res) {
     ));
   } catch (err) {
     console.error("❌ PARSE ERROR:", err);
-    return res.status(400).json({ error: "Bad form data" });
+    return res.status(400).json({ error: "Bad form data", detail: String(err) });
   }
 
   /* ----------------------------------------------------------
-     Extract & validate fields
+     Extract fields
   ---------------------------------------------------------- */
   const question = normalize(fields, "question");
   const email = normalize(fields, "email");
@@ -72,43 +75,49 @@ export default async function handler(req, res) {
   if (!email) return res.status(400).json({ error: "Missing email" });
 
   /* ----------------------------------------------------------
-     RECAPTCHA TOGGLE LOGIC
+     RECAPTCHA (TOGGLE SUPPORT)
   ---------------------------------------------------------- */
-  const TOGGLE = process.env.RECAPTCHA_TOGGLE === "true" ? "true" : "false";
+  const TOGGLE = process.env.RECAPTCHA_TOGGLE || "false";
 
   if (TOGGLE === "false") {
-    console.log("🔄 RECAPTCHA BYPASS ACTIVE (RECAPTCHA_TOGGLE=false)");
+    console.log("🔵 RECAPTCHA BYPASS ACTIVE (RECAPTCHA_TOGGLE=false)");
   } else {
-    // Only enforce recaptcha when toggle=true
-    const rec = await verifyRecaptcha(recaptchaToken, req.headers["x-forwarded-for"]);
+    const rec = await verifyRecaptcha(
+      recaptchaToken,
+      req.headers["x-forwarded-for"]
+    );
     if (!rec.ok) {
       console.error("❌ RECAPTCHA FAIL:", rec);
-      return res.status(400).json({ error: "reCAPTCHA failed", rec });
+      return res.status(400).json({
+        error: "reCAPTCHA failed",
+        rec
+      });
     }
   }
 
   /* ----------------------------------------------------------
-     File validation (palm or technical)
+     Optional palm upload
   ---------------------------------------------------------- */
-  const uploadedFile = files?.palmImage || files?.technicalFile || null;
+  const uploadedFile = files?.palmImage || null;
 
   if (uploadedFile) {
     const valid = validateUploadedFile(uploadedFile);
-    if (!valid.ok) return res.status(400).json({ error: valid.error });
+    if (!valid.ok)
+      return res.status(400).json({ error: valid.error });
   }
 
   /* ----------------------------------------------------------
-     Question classification
+     Classification (used for summary header)
   ---------------------------------------------------------- */
-  let cls;
+  let cls = { type: "personal", confidence: 1 };
   try {
     cls = await classifyQuestion(question);
-  } catch {
-    cls = { type: "personal", confidence: 0.5 };
+  } catch (err) {
+    console.error("❌ CLASSIFICATION ERROR (defaulting to personal)");
   }
 
   /* ----------------------------------------------------------
-     Run all engines in personal mode
+     Run the full Personal Engines (A — palmistry + astrology + numerology)
   ---------------------------------------------------------- */
   let enginesOut;
   try {
@@ -119,11 +128,14 @@ export default async function handler(req, res) {
     });
   } catch (err) {
     console.error("❌ ENGINE ERROR:", err);
-    return res.status(500).json({ error: "Engine failure" });
+    return res.status(500).json({
+      error: "Engine failure",
+      detail: String(err)
+    });
   }
 
   /* ----------------------------------------------------------
-     Short summary for Shopify UI
+     SHORT SUMMARY HTML (displayed on Shopify)
   ---------------------------------------------------------- */
   const shortHTML = buildSummaryHTML({
     classification: cls,
@@ -132,7 +144,7 @@ export default async function handler(req, res) {
   });
 
   /* ----------------------------------------------------------
-     Full email HTML
+     FULL LONG EMAIL (Apple-style) WITH ALL ENGINES
   ---------------------------------------------------------- */
   const longHTML = buildUniversalEmailHTML({
     title: "Your Personal Insight Report",
@@ -145,7 +157,7 @@ export default async function handler(req, res) {
   });
 
   /* ----------------------------------------------------------
-     Email send
+     EMAIL SEND
   ---------------------------------------------------------- */
   const mail = await sendEmailHTML({
     to: email,
@@ -154,12 +166,12 @@ export default async function handler(req, res) {
   });
 
   if (!mail.success) {
-    console.error("❌ EMAIL ERROR:", mail.error);
-    return res.status(500).json({ error: "Email failed" });
+    console.error("❌ EMAIL SEND ERROR:", mail.error);
+    return res.status(500).json({ error: "Email failed", detail: mail.error });
   }
 
   /* ----------------------------------------------------------
-     Success
+     SUCCESS RESPONSE
   ---------------------------------------------------------- */
   return res.json({
     ok: true,
