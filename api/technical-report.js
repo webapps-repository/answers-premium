@@ -1,4 +1,4 @@
-// /api/technical-report.js
+// /api/technical-report.js — UPDATED WITH RECAPTCHA_TOGGLE
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { api: { bodyParser: false } };
@@ -60,18 +60,23 @@ export default async function handler(req, res) {
   if (!question) return res.status(400).json({ error: "Question required" });
 
   /* --------------------------
-        VERIFY RECAPTCHA
+        RECAPTCHA TOGGLE LOGIC
   -------------------------- */
-  const rec = await verifyRecaptcha(
-    recaptchaToken,
-    req.headers["x-forwarded-for"]
-  );
+  const TOGGLE = process.env.RECAPTCHA_TOGGLE === "true" ? "true" : "false";
 
-  if (!rec.ok) {
-    return res.status(400).json({
-      error: "Invalid reCAPTCHA",
-      rec
-    });
+  if (TOGGLE === "false") {
+    console.log("🔄 RECAPTCHA BYPASS ACTIVE (RECAPTCHA_TOGGLE=false)");
+  } else {
+    const rec = await verifyRecaptcha(
+      recaptchaToken,
+      req.headers["x-forwarded-for"]
+    );
+    if (!rec.ok) {
+      return res.status(400).json({
+        error: "Invalid reCAPTCHA",
+        rec
+      });
+    }
   }
 
   /* --------------------------
