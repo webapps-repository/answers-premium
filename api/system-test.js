@@ -3,59 +3,112 @@
 // https://answers-rust.vercel.app/api/system-test.js
 
 export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
 
-import { sendEmailHTML, verifyRecaptcha } from "../lib/utils.js";
-import { buildUniversalEmailHTML } from "../lib/insights.js";
+import { verifyRecaptcha } from "../lib/utils.js";
+import { sendEmailHTML } from "../lib/utils.js";
+import { runAllEngines } from "../lib/engines.js";
+import { classifyQuestion } from "../lib/ai.js";
 
 export default async function handler(req, res) {
-  const tests = {};
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader(
+    "Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+  );
+  if (req.method === "OPTIONS") return res.status(200).end();
 
-  // ---- ENV CHECKS ----
-  tests.OPENAI = !!process.env.OPENAI_API_KEY;
-  tests.RESEND = !!process.env.RESEND_API_KEY;
-  tests.RESEND_FROM = !!process.env.RESEND_FROM;
-  tests.RECAPTCHA_SECRET_PRESENT = !!process.env.RECAPTCHA_SECRET_KEY;
+  const report = {
+    ok: true,
+    tests: {},
+    RECAPTCHA_RAW: {},
+    RECAPTCHA_ERROR_CODES: [],
+    RECAPTCHA_TOKEN_RECEIVED: null,
+    ENV: {
+      RECAPTCHA_SECRET_PRESENT: !!process.env.RECAPTCHA_SECRET,
+      RESEND_API_KEY_PRESENT: !!process.env.RESEND_API_KEY,
+      OPENAI_API_KEY_PRESENT: !!process.env.OPENAI_API_KEY
+    }
+  };
 
-  // ---- RECAPTCHA PROBE ----
-  try {
-    // We expect this to FAIL because "test-probe-token" isn't a real token,
-    // but the *error-codes* tell us if the SECRET is valid.
-    const probe = await verifyRecaptcha("test-probe-token", null);
+  // ============================
+  // 1. Test invisible v2 token delivery
+  // ============================
+  let token =
+    req.body?.token ||
+    req.query?.token ||
+    req.body?.recaptchaToken ||
+    req.query?.recaptchaToken ||
+    null;
 
-    tests.RECAPTCHA_PROBE_OK = probe.ok;
-    tests.RECAPTCHA_RAW = probe.raw || null;
+  report.RECAPTCHA_TOKEN_RECEIVED = token;
 
-    const codes = Array.isArray(probe.raw?.["error-codes"])
-      ? probe.raw["error-codes"]
-      : [];
+  if (!token) {
+    report.tests.RECAPTCHA_TOKEN_MISSING = false;
+    report.tests.RECAPTCHA_PROBE_OK = false;
 
-    tests.RECAPTCHA_ERROR_CODES = codes;
-
-    // If the secret is wrong, Google returns "invalid-input-secret"
-    tests.RECAPTCHA_SECRET_VALID = !codes.includes("invalid-input-secret");
-  } catch (e) {
-    tests.RECAPTCHA_EXCEPTION = e.message || String(e);
+    return res.json(report);
   }
 
-  // ---- EMAIL TEST ----
+  // ============================
+  // 2. Full recaptcha validation
+  // ============================
   try {
-    const html = buildUniversalEmailHTML({
-      title: "System Test Email",
-      question: "Diagnostics",
-      engines: { test: "OK" }
-    });
+    const check = await verifyRecaptcha(token, req.headers["x-forwarded-for"]);
 
+    report.RECAPTCHA_RAW = check;
+
+    if (!check.ok) {
+      report.tests.RECAPTCHA_PROBE_OK = false;
+      report.RECAPTCHA_ERROR_CODES = check?.errors || ["unknown"];
+    } else {
+      report.tests.RECAPTCHA_PROBE_OK = true;
+    }
+  } catch (err) {
+    report.tests.RECAPTCHA_PROBE_OK = false;
+    report.RECAPTCHA_ERROR_CODES.push("verifyRecaptcha-crash");
+  }
+
+  // ============================
+  // 3. Test OpenAI working
+  // ============================
+  try {
+    const c = await classifyQuestion("test question");
+    report.tests.OPENAI = !!c;
+  } catch (e) {
+    report.tests.OPENAI = false;
+  }
+
+  // ============================
+  // 4. Test email sending
+  // ============================
+  try {
     await sendEmailHTML({
-      to: process.env.RESEND_FROM,
+      to: "sales@hazcam.io",
       subject: "System Test Email",
-      html
+      html: "<div>Test OK</div>"
     });
-
-    tests.EMAIL = true;
-  } catch (e) {
-    tests.EMAIL = false;
-    tests.EMAIL_ERROR = e.message || String(e);
+    report.tests.EMAIL = true;
+  } catch (err) {
+    report.tests.EMAIL = false;
+    report.EMAIL_ERROR = err?.message || err;
   }
 
-  return res.status(200).json({ ok: true, tests });
+  // ============================
+  // 5. Test engines
+  // ============================
+  try {
+    const out = await runAllEngines({
+      question: "diagnostics",
+      mode: "personal",
+      uploadedFile: null
+    });
+    report.tests.ENGINES = !!out;
+  } catch (e) {
+    report.tests.ENGINES = false;
+    report.ENGINE_ERROR = e?.message || e;
+  }
+
+  return res.json(report);
 }
