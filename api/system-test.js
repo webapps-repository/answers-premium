@@ -31,7 +31,7 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, msg: "CORS OK" });
 
   /* -------------------------------------------
-     GATHER DEBUG INFO
+     META
   ------------------------------------------- */
   const IP =
     req.headers["x-forwarded-for"] ||
@@ -44,46 +44,35 @@ export default async function handler(req, res) {
     req.body?.recaptchaToken ||
     null;
 
+  const TOGGLE = process.env.RECAPTCHA_TOGGLE || "false";
+
   const ENV = {
+    RECAPTCHA_TOGGLE: TOGGLE,
     RECAPTCHA_SECRET_PRESENT: !!process.env.RECAPTCHA_SECRET_KEY,
     OPENAI_API_KEY_PRESENT: !!process.env.OPENAI_API_KEY,
     RESEND_API_KEY_PRESENT: !!process.env.RESEND_API_KEY,
   };
 
+  /* -------------------------------------------
+     RESULT OBJECTS
+  ------------------------------------------- */
   const RECAPTCHA = {
     TOKEN_RECEIVED: token,
+    toggle: TOGGLE,
     raw: null,
     ok: false,
+    bypass: false,
     error: null,
     ip: IP
   };
 
-  const OPENAI_TEST = {
-    ok: false,
-    error: null,
-    response: null
-  };
-
-  const EMAIL_TEST = {
-    ok: false,
-    error: null
-  };
-
-  const ENGINE_TEST = {
-    ok: false,
-    error: null,
-    output: null
-  };
-
-  const FORM_PARSE = {
-    ok: false,
-    error: null,
-    fields: null,
-    files: null
-  };
+  const OPENAI_TEST = { ok: false, error: null, response: null };
+  const EMAIL_TEST = { ok: false, error: null };
+  const ENGINE_TEST = { ok: false, error: null, output: null };
+  const FORM_PARSE = { ok: false, error: null, fields: null, files: null };
 
   /* -------------------------------------------
-     FORM PARSER TEST (POST ONLY)
+     FORM PARSER TEST (POST)
   ------------------------------------------- */
   if (method === "POST") {
     try {
@@ -102,20 +91,25 @@ export default async function handler(req, res) {
   }
 
   /* -------------------------------------------
-     RECAPTCHA TEST
+     RECAPTCHA TEST (RESPECT TOGGLE)
   ------------------------------------------- */
-  if (token) {
-    try {
-      const result = await verifyRecaptcha(token, IP);
-      RECAPTCHA.raw = result.raw || result;
-      RECAPTCHA.ok = result.ok || false;
-
-      if (!RECAPTCHA.ok) RECAPTCHA.error = result.raw;
-    } catch (err) {
-      RECAPTCHA.error = String(err);
-    }
+  if (TOGGLE === "false") {
+    RECAPTCHA.ok = true;
+    RECAPTCHA.bypass = true;
+    RECAPTCHA.raw = { bypass: true };
   } else {
-    RECAPTCHA.error = "No token provided";
+    if (!token) {
+      RECAPTCHA.error = "No token provided";
+    } else {
+      try {
+        const result = await verifyRecaptcha(token, IP);
+        RECAPTCHA.raw = result.raw || result;
+        RECAPTCHA.ok = result.ok || false;
+        if (!RECAPTCHA.ok) RECAPTCHA.error = result.raw;
+      } catch (err) {
+        RECAPTCHA.error = String(err);
+      }
+    }
   }
 
   /* -------------------------------------------
@@ -138,17 +132,16 @@ export default async function handler(req, res) {
   }
 
   /* -------------------------------------------
-     EMAIL TEST (dry run)
+     EMAIL TEST
   ------------------------------------------- */
   if (process.env.RESEND_API_KEY) {
     try {
       await sendEmailHTML({
         to: "noreply@example.com",
-        subject: "Test Email (Dry Run)",
-        html: "<p>This is a system test.</p>",
+        subject: "System Test Email",
+        html: "<p>System Test OK</p>",
         dryRun: true
       });
-
       EMAIL_TEST.ok = true;
     } catch (err) {
       EMAIL_TEST.error = String(err);
@@ -159,20 +152,18 @@ export default async function handler(req, res) {
      ENGINE TEST
   ------------------------------------------- */
   try {
-    const out = await runAllEngines({
+    ENGINE_TEST.output = await runAllEngines({
       question: "test",
       mode: "technical",
       uploadedFile: null
     });
-
     ENGINE_TEST.ok = true;
-    ENGINE_TEST.output = out;
   } catch (err) {
     ENGINE_TEST.error = String(err);
   }
 
   /* -------------------------------------------
-     FINAL RESPONSE
+     FINAL OUTPUT
   ------------------------------------------- */
   return res.json({
     ok: true,
