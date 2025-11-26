@@ -21,7 +21,7 @@ import {
 export default async function handler(req, res) {
 
   /* --------------------------
-       CORS
+       CORS (Shopify Safe)
   -------------------------- */
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
@@ -33,14 +33,18 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Not allowed" });
 
   /* ----------------------------------------------------------
-     Parse multipart/form-data
+     Parse multipart/form-data (Shopify compatible)
   ---------------------------------------------------------- */
   const form = formidable({
     multiples: false,
-    maxFileSize: 12 * 1024 * 1024
+    maxFileSize: 20 * 1024 * 1024,
+    allowEmptyFiles: true,
+    keepExtensions: true,
+    filename: (name, ext, part) =>
+      `${Date.now()}-${(part.originalFilename || "file").replace(/\s+/g, "_")}`
   });
 
-  let fields, files;
+  let fields = {}, files = {};
   try {
     ({ fields, files } = await new Promise((resolve, reject) =>
       form.parse(req, (err, f, fl) =>
@@ -84,36 +88,40 @@ export default async function handler(req, res) {
     );
     if (!rec.ok) {
       console.error("❌ RECAPTCHA FAIL:", rec);
-      return res.status(400).json({
-        error: "reCAPTCHA failed",
-        rec
-      });
+      return res.status(400).json({ error: "reCAPTCHA failed", rec });
     }
   }
 
   /* ----------------------------------------------------------
-     Optional palm upload
+     Optional palm upload (FULL FIX)
   ---------------------------------------------------------- */
-  const uploadedFile = files?.palmImage || null;
+
+  // Shopify sometimes stores as files.palmImage, sometimes as array.
+  let uploadedFile = null;
+
+  if (files?.palmImage) {
+    uploadedFile = Array.isArray(files.palmImage)
+      ? files.palmImage[0]
+      : files.palmImage;
+  }
 
   if (uploadedFile) {
     const valid = validateUploadedFile(uploadedFile);
-    if (!valid.ok)
-      return res.status(400).json({ error: valid.error });
+    if (!valid.ok) return res.status(400).json({ error: valid.error });
   }
 
   /* ----------------------------------------------------------
-     Classification (used for summary header)
+     Classification (for summary header only)
   ---------------------------------------------------------- */
   let cls = { type: "personal", confidence: 1 };
   try {
     cls = await classifyQuestion(question);
   } catch (err) {
-    console.error("❌ CLASSIFICATION ERROR (defaulting to personal)");
+    console.error("❌ CLASSIFICATION ERROR:", err);
   }
 
   /* ----------------------------------------------------------
-     Run the full Personal Engines (A — palmistry + astrology + numerology)
+     Run Personal Engines (Option A — full triad)
   ---------------------------------------------------------- */
   let enginesOut;
   try {
@@ -131,7 +139,7 @@ export default async function handler(req, res) {
   }
 
   /* ----------------------------------------------------------
-     SHORT SUMMARY HTML (displayed on Shopify)
+     SHORT SUMMARY HTML
   ---------------------------------------------------------- */
   const shortHTML = buildSummaryHTML({
     classification: cls,
@@ -140,7 +148,7 @@ export default async function handler(req, res) {
   });
 
   /* ----------------------------------------------------------
-     FULL LONG EMAIL (Apple-style) WITH ALL ENGINES
+     FULL LONG EMAIL (APPLE STYLE)
   ---------------------------------------------------------- */
   const longHTML = buildUniversalEmailHTML({
     title: "Your Personal Insight Report",
