@@ -158,7 +158,7 @@
   </form>
 
   <div id="summary" style="display:none;">
-    <h3>Short Answer</h3>
+    <h3>Melodie Says</h3>
     <div id="summary-text" class="summary-box"></div>
   </div>
 
