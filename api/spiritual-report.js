@@ -99,7 +99,7 @@ export default async function handler(req, res) {
     if (!valid.ok) return res.status(400).json({ error: valid.error });
   }
 
-  /* Engines (now compat-aware) */
+  /* Engines (compat-aware) */
   let enginesOut;
   try {
     enginesOut = await runAllEngines({
@@ -113,20 +113,21 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Engine failure", detail: String(err) });
   }
 
-  /* Compatibility score (placeholder) */
+  /* Compatibility score (placeholder formula) */
   let compatScore = 0;
   if (mode === "compat") {
     compatScore = Math.floor(40 + Math.random() * 60); // 40–100%
   }
 
-  /* Short answer for Shopify */
+  /* Short answer for Shopify (NOW includes compatScore) */
   const shortHTML = buildSummaryHTML({
     question,
     engines: enginesOut,
-    mode
+    mode,
+    compatScore
   });
 
-  /* Final Email */
+  /* Final email */
   const longHTML = buildUniversalEmailHTML({
     title: "Melodie Says",
     mode,
