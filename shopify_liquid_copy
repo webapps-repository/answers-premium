@@ -99,7 +99,8 @@
     </div>
 
     <!-- technical upload (deprecated but kept per your rules) -->
-    <div class="field" id="technical-field">
+    <!-- REMOVE extra file upload in personal mode -->
+    <div class="field" id="technical-field" style="display:none;">
       <label>Optional file upload</label>
       <input id="technicalFile" name="technicalFile" type="file">
     </div>
@@ -197,13 +198,14 @@ const statusText = document.getElementById("status-text");
 isCompat.addEventListener("change", () => {
   if (isCompat.checked) {
     personalFields.style.display = "none";
-    technicalField.style.display = "none";
     compatFields.style.display = "block";
   } else {
     personalFields.style.display = "block";
-    technicalField.style.display = "block";
     compatFields.style.display = "none";
   }
+  
+  // technical field is always hidden now
+  technicalField.style.display = "none";
 });
 
 /* submit */
