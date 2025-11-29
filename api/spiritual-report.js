@@ -99,7 +99,9 @@ export default async function handler(req, res) {
     if (!valid.ok) return res.status(400).json({ error: valid.error });
   }
 
-  /* Engines (compat-aware) */
+  /* ============================
+     Run backend engines (compat-aware)
+  ============================ */
   let enginesOut;
   try {
     enginesOut = await runAllEngines({
@@ -113,13 +115,17 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Engine failure", detail: String(err) });
   }
 
-  /* Compatibility score (placeholder formula) */
+  /* ---------------------------------------------
+     Extract AI-generated score (REAL score)
+  --------------------------------------------- */
   let compatScore = 0;
   if (mode === "compat") {
-    compatScore = Math.floor(40 + Math.random() * 60); // 40–100%
+    compatScore = enginesOut.compatScore || 0;
   }
 
-  /* Short answer for Shopify (NOW includes compatScore) */
+  /* ---------------------------------------------
+     Build frontend short-answer summary
+  --------------------------------------------- */
   const shortHTML = buildSummaryHTML({
     question,
     engines: enginesOut,
@@ -127,7 +133,9 @@ export default async function handler(req, res) {
     compatScore
   });
 
-  /* Final email */
+  /* ---------------------------------------------
+     Build full email HTML
+  --------------------------------------------- */
   const longHTML = buildUniversalEmailHTML({
     title: "Melodie Says",
     mode,
@@ -142,7 +150,7 @@ export default async function handler(req, res) {
     compatScore
   });
 
-  /* Send */
+  /* Send email */
   const mail = await sendEmailHTML({
     to: email,
     subject: "Melodie Says — Your Insight Report",
