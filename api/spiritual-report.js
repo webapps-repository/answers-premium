@@ -1,4 +1,7 @@
 // /api/spiritual-report.js — FINAL: FREE answer + FREE email + PREMIUM email link + KV token
+//
+// check source sync
+//
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
