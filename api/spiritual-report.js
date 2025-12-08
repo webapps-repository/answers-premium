@@ -220,6 +220,9 @@ export default async function handler(req, res) {
   }
 
   /* ---------------- ✅ RESPONSE TO FRONTEND ---------------- */
+
+  console.log("✅ RETURNING TOKEN:", premiumToken);
+  
   return res.json({
     ok: true,
     mode,
