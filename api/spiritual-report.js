@@ -186,7 +186,7 @@ export default async function handler(req, res) {
   /* ---------------- ✅ PREMIUM EMAIL LINK INJECTION ---------------- */
 
   const SHOPIFY_STORE = process.env.SHOPIFY_STORE_DOMAIN;
-  const VARIANT_ID    = "REPLACE_ME_VARIANT_ID";   // ✅ YOU INSERT 47550793875608 HERE
+  const VARIANT_ID    = "47550793875608";   // ✅ YOU INSERT 47550793875608 HERE
 
   const premiumLink =
     `https://${SHOPIFY_STORE}/cart/${VARIANT_ID}:1?attributes[premiumToken]={{TOKEN}}`;
