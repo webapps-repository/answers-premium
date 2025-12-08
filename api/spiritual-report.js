@@ -4,6 +4,9 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 export const config = { api: { bodyParser: false } };
 
+import crypto from "crypto";
+import { savePremiumSubmission } from "../lib/premium-store.js";
+
 import formidable from "formidable";
 import {
   normalize,
