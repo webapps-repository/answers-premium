@@ -6,6 +6,7 @@ export const config = { api: { bodyParser: false } };
 
 import formidable from "formidable";
 import crypto from "crypto";
+import { savePremiumSubmission } from "../lib/premium-store.js";
 
 import {
   normalize,
@@ -21,6 +22,9 @@ import {
 } from "../lib/engines.js";
 
 import { savePremiumSubmission } from "../lib/premium-store.js";
+
+// Create premium token
+const premiumToken = crypto.randomUUID();
 
 export default async function handler(req, res) {
 
@@ -209,10 +213,15 @@ export default async function handler(req, res) {
   }
 
   /* ---------------- RESPONSE TO FRONTEND ---------------- */
-  return res.json({
-    ok: true,
-    mode,
-    shortAnswer: shortHTML,
-    premiumToken: submissionToken
-  });
+// Save submission to KV for later webhook use
+await savePremiumSubmission(premiumToken, {
+  fields
+});
+
+return res.json({
+  ok: true,
+  mode,
+  shortAnswer: shortHTML,
+  premiumToken  // ✅ THIS IS WHAT UNLOCKS EVERYTHING
+});
 }
