@@ -1,151 +1,156 @@
-// /api/detailed-report.js
+// /api/detailed-report.js — PREMIUM PDF + EMAIL ENGINE
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+export const config = { api: { bodyParser: false } };
 
 import formidable from "formidable";
 import fs from "fs";
 
+import { normalize, validateUploadedFile, verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
 import { generateInsights } from "../lib/insights.js";
 import { generatePDF } from "../lib/pdf.js";
-import { sendEmailHTML } from "../lib/send-email.js";
-// If you already have verifyRecaptcha / validateUploadedFile in lib/utils.js, you can import them too:
-// import { verifyRecaptcha, validateUploadedFile } from "../lib/utils.js";
-
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
-function allowCors(res) {
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, X-Requested-With"
-  );
-}
-
-function parseForm(req) {
-  const form = formidable({
-    multiples: false,
-    maxFileSize: 10 * 1024 * 1024, // 10MB
-  });
-
-  return new Promise((resolve, reject) => {
-    form.parse(req, (err, fields, files) => {
-      if (err) return reject(err);
-      resolve({ fields, files });
-    });
-  });
-}
 
 export default async function handler(req, res) {
-  allowCors(res);
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  /* ===========================
+     CORS
+  =========================== */
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers",
+    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+  );
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ error: "Not allowed" });
 
-  if (req.method !== "POST") {
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
-  }
+  /* ===========================
+     PARSE FORM
+  =========================== */
+  const form = formidable({
+    multiples: false,
+    maxFileSize: 20 * 1024 * 1024,
+    keepExtensions: true
+  });
 
+  let fields = {}, files = {};
   try {
-    const { fields, files } = await parseForm(req);
+    ({ fields, files } = await new Promise((resolve, reject) =>
+      form.parse(req, (err, f, fl) =>
+        err ? reject(err) : resolve({ fields: f, files: fl })
+      )
+    ));
+  } catch (err) {
+    return res.status(400).json({ error: "Bad form data", detail: String(err) });
+  }
 
-    const fullName = fields.fullName?.toString() || "";
-    const email = fields.email?.toString() || "";
-    const dateOfBirth = fields.dateOfBirth?.toString() || "";
-    const timeOfBirth = fields.timeOfBirth?.toString() || "";
-    const birthPlace = fields.birthPlace?.toString() || "";
-    const latitude = fields.latitude
-      ? parseFloat(fields.latitude.toString())
-      : undefined;
-    const longitude = fields.longitude
-      ? parseFloat(fields.longitude.toString())
-      : undefined;
-    const gender = fields.gender?.toString() || undefined;
-    const question = fields.question?.toString() || "";
+  /* ===========================
+     NORMALIZE FIELDS
+  =========================== */
+  const fullName     = normalize(fields, "fullName");
+  const email        = normalize(fields, "email");
+  const dateOfBirth  = normalize(fields, "dateOfBirth");
+  const timeOfBirth  = normalize(fields, "timeOfBirth");
+  const birthPlace   = normalize(fields, "birthPlace");
+  const latitude     = normalize(fields, "latitude");
+  const longitude    = normalize(fields, "longitude");
+  const gender       = normalize(fields, "gender");
+  const question     = normalize(fields, "question");
+  const handSide     = normalize(fields, "handSide") || "left";
 
-    const handSide = fields.handSide?.toString() || "left";
+  if (!fullName || !email || !dateOfBirth) {
+    return res.status(400).json({
+      error: "Missing required: fullName, email, dateOfBirth"
+    });
+  }
 
-    if (!fullName || !email || !dateOfBirth) {
-      return res.status(400).json({
-        ok: false,
-        error: "Missing required fields: fullName, email, dateOfBirth.",
-      });
-    }
+  /* ===========================
+     RECAPTCHA (TOGGLE SAFE)
+  =========================== */
+  const TOGGLE = process.env.RECAPTCHA_TOGGLE || "false";
+  if (TOGGLE !== "false") {
+    const token = normalize(fields, "recaptchaToken");
+    const r = await verifyRecaptcha(token, req.headers["x-forwarded-for"]);
+    if (!r.ok) return res.status(400).json({ error: "reCAPTCHA failed", detail: r });
+  }
 
-    // Optional: captcha validation hook
-    // const recaptchaToken = fields.recaptchaToken?.toString();
-    // if (recaptchaToken && !(await verifyRecaptcha(recaptchaToken))) {
-    //   return res.status(400).json({ ok: false, error: "reCAPTCHA failed." });
-    // }
+  /* ===========================
+     PALM IMAGE (OPTIONAL)
+  =========================== */
+  let handImageBase64 = null;
+  if (files?.handImage) {
+    const file = Array.isArray(files.handImage) ? files.handImage[0] : files.handImage;
+    const v = validateUploadedFile(file);
+    if (!v.ok) return res.status(400).json({ error: v.error });
 
-    // ---- read optional hand image ----
-    let handImageBase64 = undefined;
-    const handFile = files.handImage || files.hand || files.file;
-    if (handFile && handFile.filepath) {
-      const fileData = fs.readFileSync(handFile.filepath);
-      handImageBase64 = fileData.toString("base64");
-    }
+    const buf = fs.readFileSync(file.filepath);
+    handImageBase64 = buf.toString("base64");
+  }
 
-    const person = {
-      fullName,
-      email,
-      dateOfBirth,
-      timeOfBirth,
-      birthPlace,
-      latitude,
-      longitude,
-      gender,
-    };
+  /* ===========================
+     BUILD PERSON OBJECT
+  =========================== */
+  const person = {
+    fullName,
+    email,
+    dateOfBirth,
+    timeOfBirth,
+    birthPlace,
+    latitude: latitude ? parseFloat(latitude) : undefined,
+    longitude: longitude ? parseFloat(longitude) : undefined,
+    gender
+  };
 
-    // ---- generate insights & PDF ----
-    const insights = await generateInsights({
+  /* ===========================
+     RUN PREMIUM ENGINES
+  =========================== */
+  let insights, pdfBuffer;
+  try {
+    insights = await generateInsights({
       person,
       question,
       handImageBase64,
-      handSide,
+      handSide
     });
 
-    const pdfBuffer = await generatePDF(insights);
-
-    // ---- send premium email ----
-    const subject =
-      process.env.EMAIL_SUBJECT_PREMIUM || "Your Premium Spiritual Report";
-    const html = `
-      <div style="font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;">
-        <h2 style="margin-bottom: 8px;">Your Premium Spiritual Report</h2>
-        <p>Hi ${fullName || "there"},</p>
-        <p>
-          Thank you for your purchase. Your full premium report is attached as a PDF.
-          It weaves together your astrology chart, numerology profile and palmistry insights.
-        </p>
-        <p>
-          We recommend reading it slowly, perhaps with a cup of tea, and returning to it
-          whenever you are at a crossroads or seeking clarity.
-        </p>
-        <p>With warmth,<br/>The Spiritual Reports Team</p>
-      </div>
-    `;
-
-    await sendEmailHTML({
-      to: email,
-      subject,
-      html,
-      pdfBuffer,
-      pdfFilename: "premium-spiritual-report.pdf",
-    });
-
-    res.status(200).json({
-      ok: true,
-      message: "Premium report generated and emailed successfully.",
-    });
+    pdfBuffer = await generatePDF(insights);
   } catch (err) {
-    console.error("detailed-report error:", err);
-    res.status(500).json({
-      ok: false,
-      error: "Unexpected server error generating premium report.",
+    console.error("❌ Premium Engine Failure:", err);
+    return res.status(500).json({ error: "Premium generation failed", detail: err.message });
+  }
+
+  /* ===========================
+     SEND PREMIUM EMAIL
+  =========================== */
+  const html = `
+    <div style="font-family: system-ui, sans-serif">
+      <h2>Your Premium Spiritual Report</h2>
+      <p>Hi ${fullName},</p>
+      <p>Your complete astrology, numerology and palmistry report is attached as a PDF.</p>
+      <p>Thank you for trusting this process.</p>
+      <br/>
+      <p>— Melodie</p>
+    </div>
+  `;
+
+  const emailOut = await sendEmailHTML({
+    to: email,
+    subject: "Your Premium Spiritual Report",
+    html,
+    attachments: [{
+      filename: "premium-spiritual-report.pdf",
+      content: pdfBuffer
+    }]
+  });
+
+  if (!emailOut.success) {
+    return res.status(500).json({
+      error: "Email failed",
+      detail: emailOut.error
     });
   }
+
+  return res.json({
+    ok: true,
+    message: "Premium PDF generated and emailed successfully"
+  });
 }
