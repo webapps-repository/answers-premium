@@ -6,7 +6,6 @@ export const config = { api: { bodyParser: false } };
 
 import formidable from "formidable";
 import crypto from "crypto";
-import { savePremiumSubmission } from "../lib/premium-store.js";
 
 import {
   normalize,
@@ -22,9 +21,6 @@ import {
 } from "../lib/engines.js";
 
 import { savePremiumSubmission } from "../lib/premium-store.js";
-
-// Create premium token
-const premiumToken = crypto.randomUUID();
 
 export default async function handler(req, res) {
 
@@ -92,6 +88,7 @@ export default async function handler(req, res) {
       palm1File = Array.isArray(files.palmImage)
         ? files.palmImage[0]
         : files.palmImage;
+
       const v = validateUploadedFile(palm1File);
       if (!v.ok) return res.status(400).json({ error: v.error });
     }
@@ -111,6 +108,7 @@ export default async function handler(req, res) {
       palm1File = Array.isArray(files.c1_palm)
         ? files.c1_palm[0]
         : files.c1_palm;
+
       const v1 = validateUploadedFile(palm1File);
       if (!v1.ok) return res.status(400).json({ error: v1.error });
     }
@@ -119,6 +117,7 @@ export default async function handler(req, res) {
       palm2File = Array.isArray(files.c2_palm)
         ? files.c2_palm[0]
         : files.c2_palm;
+
       const v2 = validateUploadedFile(palm2File);
       if (!v2.ok) return res.status(400).json({ error: v2.error });
     }
@@ -178,26 +177,31 @@ export default async function handler(req, res) {
     compatScore: enginesOut.compatScore
   });
 
-  /* ---------------- PREMIUM TOKEN + KV SAVE ---------------- */
-  const submissionToken = crypto.randomUUID();
+  /* ---------------- ✅ GENERATE PREMIUM TOKEN ---------------- */
+  const premiumToken = crypto.randomUUID();
 
-  await savePremiumSubmission(submissionToken, {
+  await savePremiumSubmission(premiumToken, {
     createdAt: Date.now(),
-    fields,
-    mode
+    mode,
+    fields
   });
 
   /* ---------------- ✅ PREMIUM EMAIL LINK INJECTION ---------------- */
-
   const SHOPIFY_STORE = process.env.SHOPIFY_STORE_DOMAIN;
-  const VARIANT_ID    = "47550793875608";   // ✅ YOU INSERT 47550793875608 HERE
+  const VARIANT_ID    = "47550793875608";  // ✅ YOUR CONFIRMED VARIANT
 
   const premiumLink =
-    `https://${SHOPIFY_STORE}/cart/${VARIANT_ID}:1?attributes[premiumToken]={{TOKEN}}`;
+    `https://${SHOPIFY_STORE}/cart/${VARIANT_ID}:1?attributes[premiumToken]=${encodeURIComponent(premiumToken)}`;
 
-  html = html
-    .replace("{{TOKEN}}", submissionToken)
-    .replace("{{PREMIUM_LINK}}", premiumLink);
+  html += `
+    <div style="margin-top:24px;text-align:center;">
+      <a href="${premiumLink}"
+         style="display:inline-block;padding:14px 22px;background:#1aa34a;color:white;
+                font-weight:600;border-radius:8px;text-decoration:none;">
+        Unlock Your Full Premium Report
+      </a>
+    </div>
+  `;
 
   /* ---------------- SEND EMAIL ---------------- */
   const emailOut = await sendEmailHTML({
@@ -212,16 +216,11 @@ export default async function handler(req, res) {
       .json({ error: "Email failed", detail: emailOut.error });
   }
 
-  /* ---------------- RESPONSE TO FRONTEND ---------------- */
-// Save submission to KV for later webhook use
-await savePremiumSubmission(premiumToken, {
-  fields
-});
-
-return res.json({
-  ok: true,
-  mode,
-  shortAnswer: shortHTML,
-  premiumToken  // ✅ THIS IS WHAT UNLOCKS EVERYTHING
-});
+  /* ---------------- ✅ RESPONSE TO FRONTEND ---------------- */
+  return res.json({
+    ok: true,
+    mode,
+    shortAnswer: shortHTML,
+    premiumToken
+  });
 }
