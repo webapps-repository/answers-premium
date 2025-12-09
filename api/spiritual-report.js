@@ -79,21 +79,22 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Engine failure" });
   }
 
-  const shortHTML = `
-    <div style="font-family:system-ui;">
-      <p><strong>Your Question:</strong> ${question}</p>
-      <p><strong>Answer:</strong> ${enginesOut.directAnswer || "See full insight below."}</p>
-      <p>${enginesOut.summary || ""}</p>
-    </div>
-  `;
-
   const enginesOut = await runAllEngines(...)
 
-  let html = buildUniversalEmailHTML({
-    question,
-    mode,
-    engines: enginesOut
-  });
+  const shortHTML = `
+  <div style="font-family:system-ui;">
+    <p><strong>Your Question:</strong> ${question}</p>
+    <p><strong>Answer:</strong> ${enginesOut.directAnswer || "See full insight below."}</p>
+    <p>${enginesOut.summary || ""}</p>
+  </div>
+  `;
+
+  let html = `
+    <div style="font-family:system-ui; padding:20px;">
+      <h2>Your Insight Report</h2>
+      ${shortHTML}
+    </div>
+  `;
 
   /* ---------------- ✅ FORCE PREMIUM TOKEN ---------------- */
   const premiumToken = crypto.randomUUID();
