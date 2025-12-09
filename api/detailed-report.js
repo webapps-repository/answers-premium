@@ -3,7 +3,7 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import { loadPremiumSubmission, deletePremiumSubmission } from "../lib/premium-store.js";
+import { loadPremiumSubmission } from "../lib/premium-store.js";
 import { generateInsights } from "../lib/insights.js";
 import { generatePDF } from "../lib/pdf.js";
 import { sendEmailHTML } from "../lib/utils.js";
