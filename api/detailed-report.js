@@ -18,7 +18,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST")
     return res.status(405).json({ error: "Not allowed" });
 
-  /* ✅ JSON PARSE */
+  /* ✅ SAFE JSON PARSE */
   let body = {};
   try {
     let raw = "";
@@ -29,32 +29,24 @@ export default async function handler(req, res) {
   }
 
   const premiumToken = body.premiumToken;
-  if (!premiumToken) return res.status(400).json({ error: "Missing token" });
+  if (!premiumToken) {
+    return res.status(400).json({ error: "Missing token" });
+  }
 
   const cached = await premiumStore.loadPremiumSubmission(premiumToken);
-  if (!cached) return res.status(404).json({ error: "Token expired" });
+  if (!cached) {
+    return res.status(404).json({ error: "Token expired or invalid" });
+  }
 
-  const email = cached.fields?.email;
-  const question = cached.fields?.question;
+  /* ✅✅✅ FIX: SAFE FIELD NORMALIZATION */
+  const rawEmail = cached.fields?.email;
+  const rawQuestion = cached.fields?.question;
+
+  const email = Array.isArray(rawEmail) ? rawEmail[0] : rawEmail;
+  const question = Array.isArray(rawQuestion) ? rawQuestion[0] : rawQuestion;
+
+  if (!email) {
+    return res.status(400).json({ error: "Email missing in token payload" });
+  }
 
   const html = `
-    <div style="padding:20px;">
-      <h2>Your Premium Report</h2>
-      <p><strong>Your Question:</strong> ${question}</p>
-      <p>Your premium expansion is now unlocked.</p>
-    </div>
-  `;
-
-  await sendEmailHTML({
-    to: email,
-    subject: "Your Premium Report",
-    html
-  });
-
-  await premiumStore.deletePremiumSubmission(premiumToken);
-
-  return res.status(200).json({
-    ok: true,
-    message: "Premium email sent"
-  });
-}
