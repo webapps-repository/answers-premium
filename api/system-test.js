@@ -1,11 +1,5 @@
-// /api/system-test.js
-//
-// https://answers-rust.vercel.app/api/system-test.js
-// https://answers-rust.vercel.app/api/system-test.js?token=TEST
-// https://answers-rust.vercel.app/api/system-test.js?token=YOUR_TOKEN
-// https://answers-rust.vercel.app/api/system-test.js?token=TEST123
+// /api/system-test.js — FULL PLATFORM + ENGINE + EMAIL + AI + CORS TEST
 
-// /api/system-test.js — FULL DEBUG MODE WITH ENV KEY ENUM
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -18,21 +12,23 @@ export default async function handler(req, res) {
   const start = Date.now();
   const method = req.method;
 
-  /* -------------------------------------------
-     CORS
-  ------------------------------------------- */
+  /* ---------------- CORS PLATFORM TEST ---------------- */
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Requested-With, Accept, Origin"
   );
-  if (method === "OPTIONS")
-    return res.status(200).json({ ok: true, msg: "CORS OK" });
 
-  /* -------------------------------------------
-     META
-  ------------------------------------------- */
+  if (method === "OPTIONS") {
+    return res.status(200).json({
+      ok: true,
+      cors: "PASSED",
+      platform: "OPTIONS accepted"
+    });
+  }
+
+  /* ---------------- META ---------------- */
   const IP =
     req.headers["x-forwarded-for"] ||
     req.connection?.remoteAddress ||
@@ -46,34 +42,25 @@ export default async function handler(req, res) {
 
   const TOGGLE = process.env.RECAPTCHA_TOGGLE || "false";
 
-  /* -------------------------------------------
-     ENV KEY VALIDATION
-  ------------------------------------------- */
-
-  // 1. All keys provided by Vercel
+  /* ---------------- ENV ENUM ---------------- */
   const ALL_ENV_VARS = Object.keys(process.env);
 
-  // 2. Required keys for this project
   const REQUIRED_KEYS = [
     "RECAPTCHA_SECRET_KEY",
-    "RECAPTCHA_TOGGLE", 
+    "RECAPTCHA_TOGGLE",
     "OPENAI_API_KEY",
     "RESEND_API_KEY"
   ];
 
-  // 3. Validate presence
   const ENV_KEYS = {};
   for (const key of ALL_ENV_VARS) {
-    // never send secret values, only boolean presence
     ENV_KEYS[key] = process.env[key] ? true : false;
   }
 
-  // 4. Missing required
   const MISSING_REQUIRED = REQUIRED_KEYS.filter(
     key => !process.env[key]
   );
 
-  // 5. Extra (keys present but not required)
   const EXTRA_KEYS = ALL_ENV_VARS.filter(
     key => !REQUIRED_KEYS.includes(key)
   );
@@ -86,9 +73,7 @@ export default async function handler(req, res) {
     EXTRA_KEYS
   };
 
-  /* -------------------------------------------
-     RESULT OBJECTS
-  ------------------------------------------- */
+  /* ---------------- RESULT OBJECTS ---------------- */
   const RECAPTCHA = {
     TOKEN_RECEIVED: token,
     toggle: TOGGLE,
@@ -104,9 +89,7 @@ export default async function handler(req, res) {
   const ENGINE_TEST = { ok: false, error: null, output: null };
   const FORM_PARSE = { ok: false, error: null, fields: null, files: null };
 
-  /* -------------------------------------------
-     FORM PARSER TEST (POST)
-  ------------------------------------------- */
+  /* ---------------- FORM PARSER TEST ---------------- */
   if (method === "POST") {
     try {
       const form = formidable({ multiples: false });
@@ -123,9 +106,7 @@ export default async function handler(req, res) {
     }
   }
 
-  /* -------------------------------------------
-     RECAPTCHA TEST (RESPECT TOGGLE)
-  ------------------------------------------- */
+  /* ---------------- RECAPTCHA TEST ---------------- */
   if (TOGGLE === "false") {
     RECAPTCHA.ok = true;
     RECAPTCHA.bypass = true;
@@ -145,28 +126,25 @@ export default async function handler(req, res) {
     }
   }
 
-  /* -------------------------------------------
-     OPENAI TEST
-  ------------------------------------------- */
+  /* ---------------- OPENAI TEST ---------------- */
   if (process.env.OPENAI_API_KEY) {
     try {
       const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
       const ai = await client.chat.completions.create({
-        model: "gpt-4o-mini",
+        model: "gpt-4.1-mini",
         messages: [{ role: "user", content: "ping" }]
       });
 
       OPENAI_TEST.ok = true;
-      OPENAI_TEST.response = ai.choices?.[0]?.message?.content || null;
+      OPENAI_TEST.response =
+        ai.choices?.[0]?.message?.content || null;
     } catch (err) {
       OPENAI_TEST.error = String(err);
     }
   }
 
-  /* -------------------------------------------
-     EMAIL TEST (dry run)
-  ------------------------------------------- */
+  /* ---------------- EMAIL TEST (DRY RUN) ---------------- */
   if (process.env.RESEND_API_KEY) {
     try {
       await sendEmailHTML({
@@ -181,13 +159,11 @@ export default async function handler(req, res) {
     }
   }
 
-  /* -------------------------------------------
-     ENGINE TEST
-  ------------------------------------------- */
+  /* ---------------- ENGINE TEST ---------------- */
   try {
     ENGINE_TEST.output = await runAllEngines({
       question: "test",
-      mode: "technical",
+      mode: "personal",
       uploadedFile: null
     });
     ENGINE_TEST.ok = true;
@@ -195,9 +171,7 @@ export default async function handler(req, res) {
     ENGINE_TEST.error = String(err);
   }
 
-  /* -------------------------------------------
-     FINAL OUTPUT
-  ------------------------------------------- */
+  /* ---------------- FINAL OUTPUT ---------------- */
   return res.json({
     ok: true,
     time_ms: Date.now() - start,
@@ -205,14 +179,11 @@ export default async function handler(req, res) {
     IP,
     TOKEN_PRESENT: !!token,
 
-    // Deep system diagnostics
     ENV,
     RECAPTCHA,
     OPENAI_TEST,
     EMAIL_TEST,
     ENGINE_TEST,
-    FORM_PARSE,
-
-    headers: req.headers
+    FORM_PARSE
   });
 }
