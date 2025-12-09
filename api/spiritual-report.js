@@ -75,9 +75,7 @@ export default async function handler(req, res) {
     console.error("❌ ENGINE FAILURE", err);
     return res.status(500).json({ error: "Engine failure" });
   }
-
-  const enginesOut = await runAllEngines(...)
-
+  
   const shortHTML = `
   <div style="font-family:system-ui;">
     <p><strong>Your Question:</strong> ${question}</p>
