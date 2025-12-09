@@ -17,7 +17,7 @@ import {
   sendEmailHTML
 } from "../lib/utils.js";
 
-import { runAllEngines, buildUniversalEmailHTML } from "../lib/engines.js";
+import { runAllEngines } from "../lib/engines.js";
 
 import { savePremiumSubmission } from "../lib/premium-store.js";
 
@@ -87,6 +87,7 @@ export default async function handler(req, res) {
     </div>
   `;
 
+  const enginesOut = await runAllEngines(...)
 
   let html = buildUniversalEmailHTML({
     question,
