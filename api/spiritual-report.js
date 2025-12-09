@@ -17,11 +17,7 @@ import {
   sendEmailHTML
 } from "../lib/utils.js";
 
-import {
-  runAllEngines,
-  buildSummaryHTML,
-  buildUniversalEmailHTML
-} from "../lib/engines.js";
+import { runAllEngines, buildUniversalEmailHTML } from "../lib/engines.js";
 
 import { savePremiumSubmission } from "../lib/premium-store.js";
 
@@ -83,11 +79,14 @@ export default async function handler(req, res) {
     return res.status(500).json({ error: "Engine failure" });
   }
 
-  const shortHTML = buildSummaryHTML({
-    question,
-    engines: enginesOut,
-    mode
-  });
+  const shortHTML = `
+    <div style="font-family:system-ui;">
+      <p><strong>Your Question:</strong> ${question}</p>
+      <p><strong>Answer:</strong> ${enginesOut.directAnswer || "See full insight below."}</p>
+      <p>${enginesOut.summary || ""}</p>
+    </div>
+  `;
+
 
   let html = buildUniversalEmailHTML({
     question,
