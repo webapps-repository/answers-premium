@@ -1,7 +1,4 @@
 // /api/spiritual-report.js — DEBUG PATCH: GUARANTEED premiumToken visibility
-//
-// check source sync
-//
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
