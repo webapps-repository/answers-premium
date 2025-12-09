@@ -1,5 +1,3 @@
-// /api/detailed-report.js — FINAL PREMIUM EMAIL DELIVERY (STABLE MODE)
-
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -8,7 +6,7 @@ import * as premiumStore from "../lib/premium-store.js";
 
 export default async function handler(req, res) {
 
-  /* ✅ FULL CORS FIX */
+  /* ✅ FULL CORS */
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
@@ -17,82 +15,46 @@ export default async function handler(req, res) {
   );
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") {
+  if (req.method !== "POST")
     return res.status(405).json({ error: "Not allowed" });
-  }
 
   /* ✅ JSON PARSE */
   let body = {};
   try {
-    body = await new Promise((resolve, reject) => {
-      let data = "";
-      req.on("data", c => (data += c));
-      req.on("end", () => resolve(data ? JSON.parse(data) : {}));
-    });
-  } catch (err) {
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+    body = JSON.parse(raw || "{}");
+  } catch {
     return res.status(400).json({ error: "Invalid JSON" });
   }
 
   const premiumToken = body.premiumToken;
-  if (!premiumToken) {
-    return res.status(400).json({ error: "Missing premium token" });
-  }
+  if (!premiumToken) return res.status(400).json({ error: "Missing token" });
 
-  /* ✅ SAFE LOAD */
   const cached = await premiumStore.loadPremiumSubmission(premiumToken);
-  if (!cached) {
-    return res.status(404).json({
-      error: "Premium token expired or invalid"
-    });
-  }
+  if (!cached) return res.status(404).json({ error: "Token expired" });
 
-  const { fields } = cached;
+  const email = cached.fields?.email;
+  const question = cached.fields?.question;
 
-  const email =
-    (fields.email &&
-      (Array.isArray(fields.email) ? fields.email[0] : fields.email)) || "";
-
-  const question =
-    (fields.question &&
-      (Array.isArray(fields.question)
-        ? fields.question[0]
-        : fields.question)) || "";
-
-  if (!email) {
-    return res.status(400).json({
-      error: "Email missing in original submission"
-    });
-  }
-
-  /* ✅ SEND PREMIUM EMAIL */
   const html = `
-    <div style="font-family:system-ui;padding:20px;">
-      <h2>Your Premium Spiritual Report</h2>
-      <p>Your premium reading is now unlocked.</p>
+    <div style="padding:20px;">
+      <h2>Your Premium Report</h2>
       <p><strong>Your Question:</strong> ${question}</p>
-      <p>Your full premium expansion is now being prepared.</p>
-      <p>— Melodie</p>
+      <p>Your premium expansion is now unlocked.</p>
     </div>
   `;
 
-  const emailOut = await sendEmailHTML({
+  await sendEmailHTML({
     to: email,
-    subject: "Your Premium Spiritual Report",
+    subject: "Your Premium Report",
     html
   });
 
-  if (!emailOut.success) {
-    return res.status(500).json({
-      error: "Email failed",
-      detail: emailOut.error
-    });
-  }
-
-  /* ✅ PREVENT TOKEN REUSE */
   await premiumStore.deletePremiumSubmission(premiumToken);
 
   return res.status(200).json({
     ok: true,
-    message: "Premium email delivered successfully."
+    message: "Premium email sent"
   });
 }
