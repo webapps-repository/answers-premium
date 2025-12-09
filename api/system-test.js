@@ -1,4 +1,7 @@
 // /api/system-test.js — FULL PLATFORM + ENGINE + EMAIL + AI + CORS TEST
+//
+// https://answers-premium.vercel.app/api/system-test
+//
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
