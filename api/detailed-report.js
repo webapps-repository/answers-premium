@@ -2,7 +2,6 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { sendEmailHTML } from "../lib/utils.js";
-import { loadPremiumSubmission, deletePremiumSubmission } from "../lib/premium-store.js";
 
 export default async function handler(req, res) {
 
@@ -38,26 +37,16 @@ export default async function handler(req, res) {
   }
 
   const premiumToken = body?.premiumToken;
+  const rawEmail = body?.email;
+  const rawQuestion = body?.question;
 
   if (!premiumToken) {
     return res.status(400).json({ error: "Missing premium token" });
   }
 
   /* =========================
-     ✅ TOKEN LOOKUP
-  ========================= */
-  const cached = await loadPremiumSubmission(premiumToken);
-
-  if (!cached) {
-    return res.status(404).json({ error: "Token expired or invalid" });
-  }
-
-  /* =========================
      ✅ SAFE FIELD NORMALIZATION
   ========================= */
-  const rawEmail = cached?.fields?.email;
-  const rawQuestion = cached?.fields?.question;
-
   const email =
     Array.isArray(rawEmail) ? rawEmail[0] :
     typeof rawEmail === "string" ? rawEmail.trim() : null;
@@ -67,7 +56,7 @@ export default async function handler(req, res) {
     typeof rawQuestion === "string" ? rawQuestion.trim() : "(question not provided)";
 
   if (!email) {
-    return res.status(400).json({ error: "Email missing in token payload" });
+    return res.status(400).json({ error: "Email missing in request payload" });
   }
 
   /* =========================
@@ -76,9 +65,26 @@ export default async function handler(req, res) {
   const html = `
     <div style="font-family:system-ui; padding:20px;">
       <h2>Your Premium Report</h2>
+
       <p><strong>Your Question:</strong> ${question}</p>
-      <p>Your premium expansion has now been unlocked.</p>
-      <p>Thank you for your purchase.</p>
+
+      <p>
+        Your premium expansion has now been unlocked.
+      </p>
+
+      <p>
+        This report contains your extended insights and analysis.
+      </p>
+
+      <p>
+        Thank you for your purchase and trust in Melodie.
+      </p>
+
+      <hr/>
+
+      <p style="font-size:12px; color:#666;">
+        Premium Token: ${premiumToken}
+      </p>
     </div>
   `;
 
@@ -95,11 +101,6 @@ export default async function handler(req, res) {
     console.error("❌ EMAIL FAILURE:", err);
     return res.status(500).json({ error: "Failed to send premium email" });
   }
-
-  /* =========================
-     ✅ PREVENT TOKEN REUSE
-  ========================= */
-  await deletePremiumSubmission(premiumToken);
 
   /* =========================
      ✅ FINAL SUCCESS
