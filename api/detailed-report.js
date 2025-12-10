@@ -2,24 +2,31 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 import { sendEmailHTML } from "../lib/utils.js";
-import * as premiumStore from "../lib/premium-store.js";
+import { loadPremiumSubmission, deletePremiumSubmission } from "../lib/premium-store.js";
 
 export default async function handler(req, res) {
 
-  /* ✅ FULL CORS */
+  /* =========================
+     ✅ FULL CORS (HARD FIX)
+  ========================= */
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Requested-With, Accept, Origin"
   );
 
-  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Not allowed" });
   }
 
-  /* ✅ SAFE JSON PARSE */
+  /* =========================
+     ✅ SAFE JSON PARSE
+  ========================= */
   let body = {};
   try {
     let raw = "";
@@ -30,52 +37,54 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Invalid JSON" });
   }
 
-  const premiumToken = body.premiumToken;
+  const premiumToken = body?.premiumToken;
+
   if (!premiumToken) {
-    return res.status(400).json({ error: "Missing token" });
+    return res.status(400).json({ error: "Missing premium token" });
   }
 
-  /* ✅ LOAD TOKEN */
-  const cached = await premiumStore.loadPremiumSubmission(premiumToken);
+  /* =========================
+     ✅ TOKEN LOOKUP
+  ========================= */
+  const cached = await loadPremiumSubmission(premiumToken);
+
   if (!cached) {
     return res.status(404).json({ error: "Token expired or invalid" });
   }
 
-  /* ✅✅✅ SAFE FIELD NORMALIZATION */
-  const rawEmail = cached.fields?.email;
-  const rawQuestion = cached.fields?.question;
+  /* =========================
+     ✅ SAFE FIELD NORMALIZATION
+  ========================= */
+  const rawEmail = cached?.fields?.email;
+  const rawQuestion = cached?.fields?.question;
 
-  const email = Array.isArray(rawEmail) ? rawEmail[0] : rawEmail;
-  const question = Array.isArray(rawQuestion) ? rawQuestion[0] : rawQuestion;
+  const email =
+    Array.isArray(rawEmail) ? rawEmail[0] :
+    typeof rawEmail === "string" ? rawEmail.trim() : null;
+
+  const question =
+    Array.isArray(rawQuestion) ? rawQuestion[0] :
+    typeof rawQuestion === "string" ? rawQuestion.trim() : "(question not provided)";
 
   if (!email) {
     return res.status(400).json({ error: "Email missing in token payload" });
   }
 
-  /* ✅ BUILD PREMIUM EMAIL */
+  /* =========================
+     ✅ BUILD EMAIL HTML
+  ========================= */
   const html = `
-    <div style="padding:20px;font-family:system-ui;">
+    <div style="font-family:system-ui; padding:20px;">
       <h2>Your Premium Report</h2>
-
-      <p><strong>Your Question:</strong></p>
-      <p>${question || "(not provided)"}</p>
-
-      <p style="margin-top:20px;">
-        ✅ Your premium expansion has now been unlocked.
-      </p>
-
-      <p>
-        One of our advanced engines will now generate your extended report
-        and it will be delivered in a follow-up email shortly.
-      </p>
-
-      <p style="margin-top:24px;color:#666;font-size:13px;">
-        You may safely close this page.
-      </p>
+      <p><strong>Your Question:</strong> ${question}</p>
+      <p>Your premium expansion has now been unlocked.</p>
+      <p>Thank you for your purchase.</p>
     </div>
   `;
 
-  /* ✅ SEND EMAIL */
+  /* =========================
+     ✅ SEND EMAIL
+  ========================= */
   try {
     await sendEmailHTML({
       to: email,
@@ -83,16 +92,20 @@ export default async function handler(req, res) {
       html
     });
   } catch (err) {
-    console.error("❌ EMAIL SEND ERROR:", err);
-    return res.status(500).json({ error: "Email send failed" });
+    console.error("❌ EMAIL FAILURE:", err);
+    return res.status(500).json({ error: "Failed to send premium email" });
   }
 
-  /* ✅ DELETE TOKEN (ONE-TIME USE) */
-  await premiumStore.deletePremiumSubmission(premiumToken);
+  /* =========================
+     ✅ PREVENT TOKEN REUSE
+  ========================= */
+  await deletePremiumSubmission(premiumToken);
 
-  /* ✅ FINAL RESPONSE */
+  /* =========================
+     ✅ FINAL SUCCESS
+  ========================= */
   return res.status(200).json({
     ok: true,
-    message: "Premium email sent successfully"
+    message: "✅ Premium email sent successfully"
   });
 }
