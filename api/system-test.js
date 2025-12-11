@@ -1,192 +1,117 @@
-// /api/system-test.js — FULL PLATFORM + ENGINE + EMAIL + AI + CORS TEST
-//
-// https://answers-premium.vercel.app/api/system-test
-//
-
+// /api/system-test.js
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import formidable from "formidable";
-import { verifyRecaptcha, sendEmailHTML } from "../lib/utils.js";
-import { runAllEngines } from "../lib/engines.js";
-import OpenAI from "openai";
+import fs from "fs";
+import path from "path";
 
 export default async function handler(req, res) {
-  const start = Date.now();
-  const method = req.method;
+  const started = Date.now();
+  const method = req.method || "UNKNOWN";
 
-  /* ---------------- CORS PLATFORM TEST ---------------- */
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader(
-    "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
-  );
-
-  if (method === "OPTIONS") {
-    return res.status(200).json({
-      ok: true,
-      cors: "PASSED",
-      platform: "OPTIONS accepted"
-    });
-  }
-
-  /* ---------------- META ---------------- */
-  const IP =
-    req.headers["x-forwarded-for"] ||
-    req.connection?.remoteAddress ||
-    "unknown";
-
-  const token =
-    req.query.token ||
-    req.body?.recaptchaToken ||
-    req.body?.token ||
+  const ip =
+    req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+    req.socket?.remoteAddress ||
     null;
 
-  const TOGGLE = process.env.RECAPTCHA_TOGGLE || "false";
-
-  /* ---------------- ENV ENUM ---------------- */
-  const ALL_ENV_VARS = Object.keys(process.env);
-
+  // --- ENV SNAPSHOT (similar to your current output) ---
   const REQUIRED_KEYS = [
     "RECAPTCHA_SECRET_KEY",
     "RECAPTCHA_TOGGLE",
     "OPENAI_API_KEY",
-    "RESEND_API_KEY"
+    "RESEND_API_KEY",
   ];
 
-  const ENV_KEYS = {};
-  for (const key of ALL_ENV_VARS) {
-    ENV_KEYS[key] = process.env[key] ? true : false;
-  }
-
-  const MISSING_REQUIRED = REQUIRED_KEYS.filter(
-    key => !process.env[key]
-  );
-
-  const EXTRA_KEYS = ALL_ENV_VARS.filter(
-    key => !REQUIRED_KEYS.includes(key)
-  );
+  const MISSING_REQUIRED = REQUIRED_KEYS.filter((k) => !process.env[k]);
 
   const ENV = {
-    RECAPTCHA_TOGGLE: TOGGLE,
+    RECAPTCHA_TOGGLE: process.env.RECAPTCHA_TOGGLE ?? null,
+    TEST_MODE: process.env.TEST_MODE ?? null,
+    TEST_MODE_EMAIL: process.env.TEST_MODE_EMAIL ?? null,
+    TEST_MODE_OPENAI: process.env.TEST_MODE_OPENAI ?? null,
+    TEST_MODE_PDF: process.env.TEST_MODE_PDF ?? null,
+    TEST_MODE_RECAPTCHA: process.env.TEST_MODE_RECAPTCHA ?? null,
+
+    // presence flags
+    ASTROLOGY_API_BASE_URL: !!process.env.ASTROLOGY_API_BASE_URL,
+    ASTROLOGY_API_KEY: !!process.env.ASTROLOGY_API_KEY,
+    ASTROLOGY_API_USER_ID: !!process.env.ASTROLOGY_API_USER_ID,
+    AWS_ACCESS_KEY_ID: !!process.env.AWS_ACCESS_KEY_ID,
+    AWS_DEFAULT_REGION: !!process.env.AWS_DEFAULT_REGION,
+    AWS_REGION: !!process.env.AWS_REGION,
+    AWS_S3_BUCKET: !!process.env.AWS_S3_BUCKET,
+    AWS_SECRET_ACCESS_KEY: !!process.env.AWS_SECRET_ACCESS_KEY,
+    AWS_SESSION_TOKEN: !!process.env.AWS_SESSION_TOKEN,
+    EMAIL_FROM: !!process.env.EMAIL_FROM,
+    EMAIL_SUBJECT_PREMIUM: !!process.env.EMAIL_SUBJECT_PREMIUM,
+    LANG: !!process.env.LANG,
+    REDIS_URL: !!process.env.REDIS_URL,
+    RESEND_API_KEY: !!process.env.RESEND_API_KEY,
+    RESEND_FROM: !!process.env.RESEND_FROM,
+    SHOPIFY_STORE_DOMAIN: !!process.env.SHOPIFY_STORE_DOMAIN,
+    SHOPIFY_WEBHOOK_SECRET: !!process.env.SHOPIFY_WEBHOOK_SECRET,
+    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY,
+  };
+
+  // --- API FILE LISTING (what Vercel actually sees) ---
+  let apiFiles = null;
+  let apiFilesError = null;
+
+  try {
+    const root = process.cwd();
+    const apiDir = path.join(root, "api");
+    apiFiles = fs.readdirSync(apiDir);
+  } catch (err) {
+    apiFilesError = err.message;
+  }
+
+  // --- ROUTE PROBES (HEAD requests to each API route) ---
+  async function probeRoute(routePath) {
+    try {
+      const base =
+        process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : process.env.VERCEL_PROJECT_PRODUCTION_URL
+          ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
+          : "http://localhost:3000";
+
+      const url = `${base}${routePath}`;
+
+      const resp = await fetch(url, { method: "HEAD" });
+      return {
+        ok: true,
+        status: resp.status,
+        statusText: resp.statusText,
+      };
+    } catch (err) {
+      return {
+        ok: false,
+        error: err.message,
+      };
+    }
+  }
+
+  const ROUTES = {
+    spiritualReport: await probeRoute("/api/spiritual-report"),
+    detailedReport: await probeRoute("/api/detailed-report"),
+    technicalReport: await probeRoute("/api/technical-report"),
+  };
+
+  const time_ms = Date.now() - started;
+
+  return res.status(200).json({
+    ok: true,
+    time_ms,
+    method,
+    IP: ip,
+    TOKEN_PRESENT: !!req.headers["authorization"],
     REQUIRED_KEYS,
     MISSING_REQUIRED,
-    ENV_KEYS,
-    EXTRA_KEYS
-  };
-
-  /* ---------------- RESULT OBJECTS ---------------- */
-  const RECAPTCHA = {
-    TOKEN_RECEIVED: token,
-    toggle: TOGGLE,
-    raw: null,
-    ok: false,
-    bypass: false,
-    error: null,
-    ip: IP
-  };
-
-  const OPENAI_TEST = { ok: false, error: null, response: null };
-  const EMAIL_TEST = { ok: false, error: null };
-  const ENGINE_TEST = { ok: false, error: null, output: null };
-  const FORM_PARSE = { ok: false, error: null, fields: null, files: null };
-
-  /* ---------------- FORM PARSER TEST ---------------- */
-  if (method === "POST") {
-    try {
-      const form = formidable({ multiples: false });
-      const { fields, files } = await new Promise((resolve, reject) =>
-        form.parse(req, (err, f, fl) =>
-          err ? reject(err) : resolve({ fields: f, files: fl })
-        )
-      );
-      FORM_PARSE.ok = true;
-      FORM_PARSE.fields = fields;
-      FORM_PARSE.files = files;
-    } catch (err) {
-      FORM_PARSE.error = String(err);
-    }
-  }
-
-  /* ---------------- RECAPTCHA TEST ---------------- */
-  if (TOGGLE === "false") {
-    RECAPTCHA.ok = true;
-    RECAPTCHA.bypass = true;
-    RECAPTCHA.raw = { bypass: true };
-  } else {
-    if (!token) {
-      RECAPTCHA.error = "No token provided";
-    } else {
-      try {
-        const result = await verifyRecaptcha(token, IP);
-        RECAPTCHA.raw = result.raw || result;
-        RECAPTCHA.ok = result.ok || false;
-        if (!RECAPTCHA.ok) RECAPTCHA.error = result.raw;
-      } catch (err) {
-        RECAPTCHA.error = String(err);
-      }
-    }
-  }
-
-  /* ---------------- OPENAI TEST ---------------- */
-  if (process.env.OPENAI_API_KEY) {
-    try {
-      const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-      const ai = await client.chat.completions.create({
-        model: "gpt-4.1-mini",
-        messages: [{ role: "user", content: "ping" }]
-      });
-
-      OPENAI_TEST.ok = true;
-      OPENAI_TEST.response =
-        ai.choices?.[0]?.message?.content || null;
-    } catch (err) {
-      OPENAI_TEST.error = String(err);
-    }
-  }
-
-  /* ---------------- EMAIL TEST (DRY RUN) ---------------- */
-  if (process.env.RESEND_API_KEY) {
-    try {
-      await sendEmailHTML({
-        to: "noreply@example.com",
-        subject: "System Test Email",
-        html: "<p>System Test OK</p>",
-        dryRun: true
-      });
-      EMAIL_TEST.ok = true;
-    } catch (err) {
-      EMAIL_TEST.error = String(err);
-    }
-  }
-
-  /* ---------------- ENGINE TEST ---------------- */
-  try {
-    ENGINE_TEST.output = await runAllEngines({
-      question: "test",
-      mode: "personal",
-      uploadedFile: null
-    });
-    ENGINE_TEST.ok = true;
-  } catch (err) {
-    ENGINE_TEST.error = String(err);
-  }
-
-  /* ---------------- FINAL OUTPUT ---------------- */
-  return res.json({
-    ok: true,
-    time_ms: Date.now() - start,
-    method,
-    IP,
-    TOKEN_PRESENT: !!token,
-
     ENV,
-    RECAPTCHA,
-    OPENAI_TEST,
-    EMAIL_TEST,
-    ENGINE_TEST,
-    FORM_PARSE
+    API_FILES: {
+      files: apiFiles,
+      error: apiFilesError,
+    },
+    ROUTES,
   });
 }
