@@ -1,114 +1,129 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const config = { api: { bodyParser: false } };   // ✅ REQUIRED
 
 import { sendEmailHTML } from "../lib/utils.js";
-import { loadPremiumSubmission, deletePremiumSubmission } from "../lib/premium-store.js";
+import {
+  loadPremiumSubmission,
+  deletePremiumSubmission
+} from "../lib/premium-store.js";
 
 export default async function handler(req, res) {
-
-  /* =========================
-     FULL CORS (WORKING)
-  ========================= */
+  /* ------------------------------
+      CORS (MUST Allow Shopify)
+  ------------------------------ */
   res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
     "Content-Type, Authorization, X-Requested-With, Accept, Origin"
   );
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Not allowed" });
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
 
-  /* =========================
-     SAFE JSON PARSE
-  ========================= */
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method not allowed" });
+  }
+
+  /* ------------------------------
+        SAFE JSON BODY PARSE
+  ------------------------------ */
   let body = {};
   try {
     let raw = "";
     for await (const chunk of req) raw += chunk;
     body = JSON.parse(raw || "{}");
-  } catch {
+  } catch (err) {
+    console.error("❌ JSON PARSE ERROR:", err);
     return res.status(400).json({ error: "Invalid JSON" });
   }
 
   const premiumToken = body?.premiumToken;
-
   if (!premiumToken) {
     return res.status(400).json({ error: "Missing premium token" });
   }
 
-  /* =========================
-     LOAD TOKEN
-  ========================= */
+  /* ------------------------------
+      LOAD TOKEN PAYLOAD
+  ------------------------------ */
   const cached = await loadPremiumSubmission(premiumToken);
-
   if (!cached) {
     return res.status(404).json({ error: "Token expired or invalid" });
   }
 
-  /* =========================
-     NORMALIZE FIELDS
-  ========================= */
-  function norm(x) {
-    if (Array.isArray(x)) return x[0];
-    if (typeof x === "string") return x.trim();
-    return null;
-  }
+  const fields = cached.fields || {};
 
-  const email     = norm(cached.fields?.email);
-  const question  = norm(cached.fields?.question);
-  const fullName  = norm(cached.fields?.fullName)  || "Guest";
-  const birthDate = norm(cached.fields?.birthDate) || "Not provided";
-  const birthCity = norm(cached.fields?.birthCity) || "Not provided";
+  const email =
+    Array.isArray(fields.email) ? fields.email[0] :
+    typeof fields.email === "string" ? fields.email.trim() : null;
 
   if (!email) {
-    return res.status(400).json({ error: "Email missing in token payload" });
+    return res.status(400).json({ error: "Email missing from token payload" });
   }
 
-  /* =========================
-     EMAIL HTML
-  ========================= */
+  const question =
+    Array.isArray(fields.question) ? fields.question[0] :
+    typeof fields.question === "string" ? fields.question.trim() : "(No question)";
+
+  const fullName =
+    Array.isArray(fields.fullName) ? fields.fullName[0] :
+    typeof fields.fullName === "string" ? fields.fullName.trim() : "Guest";
+
+  const birthDate =
+    Array.isArray(fields.birthDate) ? fields.birthDate[0] :
+    typeof fields.birthDate === "string" ? fields.birthDate.trim() : "Unknown";
+
+  const birthCity =
+    Array.isArray(fields.birthCity) ? fields.birthCity[0] :
+    typeof fields.birthCity === "string" ? fields.birthCity.trim() : "Unknown";
+
+  /* ------------------------------
+          PREMIUM HTML
+  ------------------------------ */
   const html = `
   <div style="font-family:system-ui; max-width:700px; margin:auto; padding:24px;">
     <h1 style="color:#6c63ff;">🔮 Your Premium Spiritual Report</h1>
 
     <p><strong>Name:</strong> ${fullName}</p>
-    <p><strong>Birth Date:</strong> ${birthDate}</p>
+    <p><strong>Date of Birth:</strong> ${birthDate}</p>
     <p><strong>Birth City:</strong> ${birthCity}</p>
 
-    <hr style="margin:20px 0">
+    <hr />
 
     <h3>Your Question</h3>
-    <p style="background:#f4f4f4; padding:12px; border-radius:6px;">
-      ${question}
-    </p>
+    <p>${question}</p>
 
-    <h2>✨ Premium Insights</h2>
-    <p>Your expanded reading is generated from astrology, numerology and energetic interpretation layers.</p>
+    <hr />
 
-    <p style="margin-top:20px;">With care,<br><strong>Melodie ✨</strong></p>
-  </div>
-  `;
+    <h2>✨ Deep Insights</h2>
+    <p>Your full premium expanded spiritual reading would go here…</p>
 
-  /* =========================
-     SEND EMAIL
-  ========================= */
+    <p style="margin-top:40px;">With care,<br><strong>Melodie ✨</strong></p>
+  </div>`;
+
+  /* ------------------------------
+        SEND EMAIL
+  ------------------------------ */
   try {
     await sendEmailHTML({
       to: email,
       subject: "Your Premium Spiritual Report",
       html
     });
-  } catch (e) {
-    console.error("EMAIL ERROR", e);
-    return res.status(500).json({ error: "Failed to send email" });
+
+  } catch (err) {
+    console.error("❌ EMAIL ERROR:", err);
+    return res.status(500).json({ error: "Email failed" });
   }
 
-  /* =========================
-     DELETE TOKEN
-  ========================= */
+  /* ------------------------------
+        REMOVE TOKEN (security)
+  ------------------------------ */
   await deletePremiumSubmission(premiumToken);
 
-  return res.status(200).json({ ok: true, message: "Premium report sent" });
+  return res.status(200).json({
+    ok: true,
+    message: "Premium report sent"
+  });
 }
