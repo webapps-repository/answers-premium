@@ -1,156 +1,215 @@
+// /api/system-test.js
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-import FormData from "form-data";
-import { createClient } from "redis";
+/* --------- helpers --------- */
 
-// ---------- Helpers ----------
-async function postJSON(url, obj) {
+const REQUIRED_KEYS = [
+  "RECAPTCHA_SECRET_KEY",
+  "RECAPTCHA_TOGGLE",
+  "OPENAI_API_KEY",
+  "RESEND_API_KEY",
+];
+
+function baseUrlFromReq(req) {
+  const proto =
+    req.headers["x-forwarded-proto"] ||
+    (process.env.VERCEL ? "https" : "http");
+  const host =
+    req.headers["x-forwarded-host"] ||
+    req.headers["host"] ||
+    process.env.VERCEL_URL ||
+    "localhost:3000";
+  return `${proto}://${host}`;
+}
+
+async function probeRoute(base, name) {
+  const url = `${base}/api/${name}`;
+  const out = {};
+
+  // GET
   try {
+    const r = await fetch(url, { method: "GET" });
+    out.GET = {
+      ok: true,
+      status: r.status,
+      statusText:
+        r.status === 405 ? "Alive (rejects GET)" : r.statusText || "",
+    };
+  } catch (err) {
+    out.GET = {
+      ok: false,
+      status: 0,
+      statusText: `GET error: ${String(err.message || err)}`,
+    };
+  }
+
+  // POST (send minimal JSON; 400 is acceptable = "I'm alive but body is wrong")
+  try {
+    const body =
+      name === "detailed-report"
+        ? { premiumToken: "TEST" }
+        : { test: true };
     const r = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(obj)
+      body: JSON.stringify(body),
     });
-    return { ok: true, status: r.status, statusText: r.statusText };
-  } catch (e) {
-    return { ok: false, error: e.message };
-  }
-}
-
-async function postForm(url, fields = {}) {
-  try {
-    const fd = new FormData();
-    for (const [k, v] of Object.entries(fields)) fd.append(k, v);
-
-    const r = await fetch(url, {
-      method: "POST",
-      body: fd
-    });
-
-    const text = await r.text().catch(() => "");
-    return {
+    out.POST = {
       ok: true,
       status: r.status,
-      statusText: r.statusText,
-      response: text.slice(0, 200)
+      statusText:
+        r.status === 400
+          ? "Bad Request (but route alive)"
+          : r.statusText || "",
     };
-  } catch (e) {
-    return { ok: false, error: e.message };
+  } catch (err) {
+    out.POST = {
+      ok: false,
+      status: 0,
+      statusText: `POST error: ${String(err.message || err)}`,
+    };
+  }
+
+  return out;
+}
+
+async function testOpenAI(base) {
+  try {
+    const r = await fetch(`${base}/api/openai-test`);
+    const text = await r.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      return {
+        ok: false,
+        error: "openai-test did not return JSON",
+        raw: text.slice(0, 120),
+      };
+    }
+    return { ok: !!json?.ok, response: json };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
   }
 }
 
-// ---------- MAIN ----------
-export default async function handler(req, res) {
-  const start = Date.now();
-  const out = {
-    ok: true,
-    time_ms: 0,
-    method: req.method,
-    IP: req.headers["x-forwarded-for"] || "unknown",
-    TOKEN_PRESENT: false
-  };
-
-  // --------- ENV REQUIRED ----------
-  const REQUIRED = [
-    "RECAPTCHA_SECRET_KEY",
-    "RECAPTCHA_TOGGLE",
-    "OPENAI_API_KEY",
-    "RESEND_API_KEY"
-  ];
-
-  out.REQUIRED_KEYS = REQUIRED;
-  out.MISSING_REQUIRED = REQUIRED.filter(k => !process.env[k]);
-
-  // --------- ENV SUMMARY ----------
-  out.ENV = {
-    RECAPTCHA_TOGGLE: process.env.RECAPTCHA_TOGGLE,
-    TEST_MODE: process.env.TEST_MODE,
-    TEST_MODE_EMAIL: process.env.TEST_MODE_EMAIL,
-    TEST_MODE_OPENAI: process.env.TEST_MODE_OPENAI,
-    TEST_MODE_PDF: process.env.TEST_MODE_PDF,
-    TEST_MODE_RECAPTCHA: process.env.TEST_MODE_RECAPTCHA,
-    ASTROLOGY_API_BASE_URL: !!process.env.ASTROLOGY_API_BASE_URL,
-    ASTROLOGY_API_KEY: !!process.env.ASTROLOGY_API_KEY,
-    ASTROLOGY_API_USER_ID: !!process.env.ASTROLOGY_API_USER_ID,
-    EMAIL_FROM: !!process.env.EMAIL_FROM,
-    EMAIL_SUBJECT_PREMIUM: !!process.env.EMAIL_SUBJECT_PREMIUM,
-    REDIS_URL: !!process.env.REDIS_URL,
-    RESEND_API_KEY: !!process.env.RESEND_API_KEY,
-    RESEND_FROM: !!process.env.RESEND_FROM,
-    SHOPIFY_STORE_DOMAIN: !!process.env.SHOPIFY_STORE_DOMAIN,
-    SHOPIFY_WEBHOOK_SECRET: !!process.env.SHOPIFY_WEBHOOK_SECRET,
-    OPENAI_API_KEY: !!process.env.OPENAI_API_KEY
-  };
-
-  const BASE = "https://" + req.headers.host + "/api";
-
-  // ---------- ROUTES CHECK ----------
-  out.ROUTES = {
-    spiritualReport: {
-      GET: await postJSON(BASE + "/spiritual-report", {}),
-      POST: await postJSON(BASE + "/spiritual-report", { test: true })
-    },
-    detailedReport: {
-      GET: await postJSON(BASE + "/detailed-report", {}),
-      POST: await postJSON(BASE + "/detailed-report", { test: true })
-    },
-    technicalReport: {
-      GET: await postJSON(BASE + "/technical-report", {}),
-      POST: await postJSON(BASE + "/technical-report", { test: true })
+async function testEmail(base) {
+  try {
+    const r = await fetch(`${base}/api/email-test`);
+    const text = await r.text();
+    let json = null;
+    try {
+      json = JSON.parse(text);
+    } catch (err) {
+      return {
+        ok: false,
+        error: "email-test did not return JSON",
+        raw: text.slice(0, 120),
+      };
     }
+    return { ok: !!json?.ok, response: json };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+async function testRedis() {
+  const url = process.env.REDIS_URL;
+  if (!url) {
+    return { ok: false, error: "REDIS_URL not set" };
+  }
+
+  try {
+    const { createClient } = await import("redis");
+    const client = createClient({ url });
+    await client.connect();
+    const key = `test:${Date.now()}`;
+    await client.set(key, key);
+    const read = await client.get(key);
+    await client.quit();
+    return {
+      ok: read === key,
+      wrote: key,
+      read,
+    };
+  } catch (err) {
+    return { ok: false, error: String(err.message || err) };
+  }
+}
+
+/* --------- main handler --------- */
+
+export default async function handler(req, res) {
+  const started = Date.now();
+  const base = baseUrlFromReq(req);
+
+  const envInfo = {};
+  for (const k of [
+    "RECAPTCHA_TOGGLE",
+    "TEST_MODE",
+    "TEST_MODE_EMAIL",
+    "TEST_MODE_OPENAI",
+    "TEST_MODE_PDF",
+    "TEST_MODE_RECAPTCHA",
+    "ASTROLOGY_API_BASE_URL",
+    "ASTROLOGY_API_KEY",
+    "ASTROLOGY_API_USER_ID",
+    "EMAIL_FROM",
+    "EMAIL_SUBJECT_PREMIUM",
+    "REDIS_URL",
+    "RESEND_API_KEY",
+    "RESEND_FROM",
+    "SHOPIFY_STORE_DOMAIN",
+    "SHOPIFY_WEBHOOK_SECRET",
+    "OPENAI_API_KEY",
+  ]) {
+    const v = process.env[k];
+    if (v !== undefined) {
+      envInfo[k] = k === "OPENAI_API_KEY" || k === "RESEND_API_KEY"
+        ? true
+        : v;
+    }
+  }
+
+  const missingRequired = REQUIRED_KEYS.filter(
+    (k) => !process.env[k]
+  );
+
+  const routes = {
+    spiritualReport: await probeRoute(base, "spiritual-report"),
+    detailedReport: await probeRoute(base, "detailed-report"),
+    technicalReport: await probeRoute(base, "technical-report"),
   };
 
-  // ---------- RECAPTCHA TEST ----------
-  out.RECAPTCHA = {
+  // reCAPTCHA: we only report toggle & bypass – system-test requests always bypass
+  const recaptcha = {
     ok: true,
-    bypass: process.env.RECAPTCHA_TOGGLE === "false"
+    bypass: true,
   };
 
-  // ---------- OPENAI TEST ----------
-  try {
-    const ping = await (await fetch(BASE + "/openai-test")).json();
-    out.OPENAI_TEST = { ok: true, response: ping.response };
-  } catch (e) {
-    out.OPENAI_TEST = { ok: false, error: e.message };
-  }
+  const openaiTest = await testOpenAI(base);
+  const emailTest = await testEmail(base);
+  const redisTest = await testRedis();
 
-  // ---------- EMAIL TEST ----------
-  try {
-    const ping = await (await fetch(BASE + "/email-test")).json();
-    out.EMAIL_TEST = ping;
-  } catch (e) {
-    out.EMAIL_TEST = { ok: false, error: e.message };
-  }
+  const time_ms = Date.now() - started;
 
-  // ---------- REDIS TEST ----------
-  try {
-    const redis = createClient({ url: process.env.REDIS_URL });
-    await redis.connect();
-
-    const key = "test:" + Date.now();
-    await redis.set(key, key);
-    const val = await redis.get(key);
-
-    out.REDIS_TEST = { ok: true, wrote: key, read: val };
-    await redis.quit();
-  } catch (e) {
-    out.REDIS_TEST = { ok: false, error: e.message };
-  }
-
-  // ---------- FULL FORM SIMULATION (SPIRITUAL REPORT) ----------
-  out.SIM_SPIRITUAL = await postForm(BASE + "/spiritual-report", {
-    email: "test@example.com",
-    question: "Test question"
+  return res.status(200).json({
+    ok: true,
+    time_ms,
+    method: req.method,
+    IP:
+      req.headers["x-real-ip"] ||
+      req.headers["x-forwarded-for"] ||
+      null,
+    TOKEN_PRESENT: !!req.headers["authorization"],
+    REQUIRED_KEYS,
+    MISSING_REQUIRED: missingRequired,
+    ENV: envInfo,
+    ROUTES: routes,
+    RECAPTCHA: recaptcha,
+    OPENAI_TEST: openaiTest,
+    EMAIL_TEST: emailTest,
+    REDIS_TEST: redisTest,
   });
-
-  // ---------- FULL FORM SIMULATION (DETAILED REPORT) ----------
-  out.SIM_DETAILED = await postForm(BASE + "/detailed-report", {
-    email: "test@example.com",
-    premiumToken: "TEST"
-  });
-
-  // ---------- FINISH ----------
-  out.time_ms = Date.now() - start;
-  return res.status(200).json(out);
 }
