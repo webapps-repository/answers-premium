@@ -1,14 +1,17 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+/* IMPORTS */
 import { sendEmailHTML } from "../lib/utils.js";
-import { loadPremiumSubmission, deletePremiumSubmission } from "../lib/premium-store.js";
+import {
+  loadPremiumSubmission,
+  deletePremiumSubmission
+} from "../lib/premium-store.js";
 
 export default async function handler(req, res) {
-
-  /* =========================
-     ✅ FULL CORS (PRODUCTION SAFE)
-  ========================= */
+  /* ===============================
+     CORS (FULL PRODUCTION MODE)
+  =============================== */
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
@@ -24,9 +27,9 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Not allowed" });
   }
 
-  /* =========================
-     ✅ SAFE JSON PARSE
-  ========================= */
+  /* ===============================
+     SAFE JSON PARSE
+  =============================== */
   let body = {};
   try {
     let raw = "";
@@ -38,155 +41,129 @@ export default async function handler(req, res) {
   }
 
   const premiumToken = body?.premiumToken;
-
   if (!premiumToken) {
     return res.status(400).json({ error: "Missing premium token" });
   }
 
-  /* =========================
-     ✅ TOKEN LOOKUP
-  ========================= */
+  console.log("🔍 PREMIUM TOKEN RECEIVED:", premiumToken);
+
+  /* ===============================
+     LOOKUP TOKEN IN STORE
+  =============================== */
   const cached = await loadPremiumSubmission(premiumToken);
 
   if (!cached) {
+    console.log("❌ TOKEN NOT FOUND IN MEMORY:", premiumToken);
     return res.status(404).json({ error: "Token expired or invalid" });
   }
 
-  /* =========================
-     ✅ SAFE FIELD NORMALIZATION
-  ========================= */
-  const rawEmail    = cached?.fields?.email;
-  const rawQuestion = cached?.fields?.question;
-  const rawName     = cached?.fields?.fullName;
-  const rawDOB      = cached?.fields?.birthDate;
-  const rawCity     = cached?.fields?.birthCity;
+  console.log("✅ TOKEN LOADED:", cached);
 
-  const email =
-    Array.isArray(rawEmail) ? rawEmail[0] :
-    typeof rawEmail === "string" ? rawEmail.trim() : null;
+  /* ===============================
+     NORMALIZE FIELDS
+  =============================== */
+  const getField = (value, fallback = "Not provided") => {
+    if (Array.isArray(value)) return value[0] || fallback;
+    if (typeof value === "string") return value.trim() || fallback;
+    return fallback;
+  };
 
-  const question =
-    Array.isArray(rawQuestion) ? rawQuestion[0] :
-    typeof rawQuestion === "string" ? rawQuestion.trim() : "(No question provided)";
-
-  const fullName =
-    Array.isArray(rawName) ? rawName[0] :
-    typeof rawName === "string" ? rawName.trim() : "Guest";
-
-  const birthDate =
-    Array.isArray(rawDOB) ? rawDOB[0] :
-    typeof rawDOB === "string" ? rawDOB.trim() : "Not provided";
-
-  const birthCity =
-    Array.isArray(rawCity) ? rawCity[0] :
-    typeof rawCity === "string" ? rawCity.trim() : "Not provided";
+  const email       = getField(cached.fields?.email, null);
+  const question    = getField(cached.fields?.question, "(No question provided)");
+  const fullName    = getField(cached.fields?.fullName, "Guest");
+  const birthDate   = getField(cached.fields?.birthDate);
+  const birthTime   = getField(cached.fields?.birthTime);
+  const birthPlace  = getField(cached.fields?.birthPlace);
 
   if (!email) {
-    return res.status(400).json({ error: "Email missing in token payload" });
+    return res.status(400).json({ error: "Email missing in payload" });
   }
 
-  /* =========================
-     ✅ LONG-FORM PREMIUM HTML
-  ========================= */
+  /* ===============================
+     PREMIUM REPORT HTML
+  =============================== */
   const html = `
-  <div style="font-family:system-ui; max-width:700px; margin:auto; padding:24px; background:#ffffff;">
-    
-    <h1 style="color:#6c63ff;">🔮 Your Premium Spiritual Report</h1>
+  <div style="font-family:system-ui; max-width:700px; margin:auto; padding:24px;">
+    <h1 style="color:#6c63ff;">✨ Your Premium Spiritual Report</h1>
 
+    <h3>Personal Details</h3>
     <p><strong>Name:</strong> ${fullName}</p>
     <p><strong>Date of Birth:</strong> ${birthDate}</p>
-    <p><strong>Birth City:</strong> ${birthCity}</p>
+    <p><strong>Time of Birth:</strong> ${birthTime}</p>
+    <p><strong>Birth Place:</strong> ${birthPlace}</p>
 
     <hr style="margin:20px 0">
 
     <h3>Your Question</h3>
-    <p style="background:#f4f4f4; padding:12px; border-radius:6px;">
+    <p style="background:#f4f4f4;padding:12px;border-radius:6px;">
       ${question}
     </p>
 
     <hr style="margin:20px 0">
 
-    <h2>✨ Premium Insight Expansion</h2>
-
+    <h2>🔮 Deep Premium Insight</h2>
     <p>
-      This expanded report builds on your original spiritual response by
-      extracting deeper energetic, symbolic and subconscious patterns.
+      This expanded report provides deeper interpretations across astrology,
+      numerology and palmistry layers, focusing on energetic pathways, karmic
+      development arcs, decision cycles, and subconscious alignment themes.
     </p>
 
     <h3>🌙 Astrology Layer</h3>
-    <p>
-      Your birth data suggests karmic patterns connected to learning cycles,
-      inner transformation and future opportunity gates that activate through
-      time-based planetary transits.
-    </p>
+    <p>Your patterns show recurring cycles of transformation, intuition growth, and destiny alignment.</p>
 
     <h3>🔢 Numerology Layer</h3>
-    <p>
-      Your life theme is governed by repeating vibration patterns that influence
-      relationships, career momentum and personal decision cycles.
-    </p>
+    <p>Your vibration indicates periodic opportunity gates and close-cycle emotional resets.</p>
 
     <h3>✋ Palmistry Layer</h3>
-    <p>
-      Even without an image, energetic palm vectors reveal adaptive intelligence,
-      resilience under pressure, leadership polarity and intuition dominance.
-    </p>
+    <p>Your palm signature reflects resilience, life-path adaptability, and intuitive skill elevation.</p>
 
-    <h3>🧠 Shadow & Growth Themes</h3>
-    <p>
-      The dominant internal tension sits between comfort and expansion. When
-      navigated correctly, this tension becomes the main engine of growth.
-    </p>
+    <h3>🧠 Shadow Themes</h3>
+    <p>Your greatest tension forms between comfort and breakthrough. When acknowledged, this becomes your growth engine.</p>
 
     <h3>💎 Key Guidance</h3>
     <ul>
-      <li>Trust delayed opportunities.</li>
-      <li>Do not rush decision windows.</li>
-      <li>Cycles repeat every 9–12 months.</li>
+      <li>Move slowly through intuitive decisions.</li>
+      <li>Opportunity windows repeat in cycles.</li>
+      <li>Your emotional intuition is extremely accurate.</li>
     </ul>
 
-    <hr style="margin:28px 0">
-
-    <p style="font-size:13px; color:#777;">
-      This message was generated exclusively for you as a premium user.
-      Please do not share your token.
+    <p style="margin-top:24px;font-size:13px;color:#777;">
+      This premium insight was generated exclusively for you.
     </p>
 
     <p style="margin-top:20px;">
-      With care,<br>
-      <strong>Melodie ✨</strong>
+      With care,<br><strong>Melodie ✨</strong>
     </p>
-
   </div>
   `;
 
-  /* =========================
-     ✅ SEND EMAIL (HARD LOGGED)
-  ========================= */
+  /* ===============================
+     SEND EMAIL
+  =============================== */
   try {
-    const sendResult = await sendEmailHTML({
+    const result = await sendEmailHTML({
       to: email,
       subject: "Your Premium Spiritual Report",
       html
     });
 
-    console.log("✅ EMAIL SENT:", sendResult);
-
+    console.log("✅ PREMIUM EMAIL SENT:", result);
   } catch (err) {
-    console.error("❌ EMAIL FAILURE:", err);
-    return res.status(500).json({ error: "Failed to send premium email" });
+    console.error("❌ EMAIL ERROR:", err);
+    return res.status(500).json({ error: "Failed to send email" });
   }
 
-  /* =========================
-     ✅ DELETE TOKEN (ANTI-REUSE)
-  ========================= */
+  /* ===============================
+     DELETE TOKEN (NO REUSE)
+  =============================== */
   await deletePremiumSubmission(premiumToken);
+  console.log("🗑️ TOKEN DELETED:", premiumToken);
 
-  /* =========================
-     ✅ FINAL SUCCESS
-  ========================= */
+  /* ===============================
+     SUCCESS RESPONSE
+  =============================== */
   return res.status(200).json({
     ok: true,
-    message: "✅ Premium email sent successfully"
+    message: "Premium report sent successfully"
   });
 }
