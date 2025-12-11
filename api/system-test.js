@@ -1,91 +1,157 @@
-// /api/system-test.js V6 from chatgpt
+// /api/system-test.js V7 from chatgpt
 
 export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-
-import { savePremiumSubmission, loadPremiumSubmission } from "../lib/premium-store.js";
-import crypto from "crypto";
 
 export default async function handler(req, res) {
-  const started = Date.now();
+  const start = Date.now();
+  const BASE = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "http://localhost:3000";
 
-  /* ---------- BASIC ENV CHECKS ---------- */
+  function json(v) {
+    return JSON.stringify(v, null, 2);
+  }
+
+  /* ----------------------------------------
+     1) ENVIRONMENT CHECK
+  ---------------------------------------- */
   const REQUIRED = [
     "RECAPTCHA_SECRET_KEY",
     "RECAPTCHA_TOGGLE",
     "OPENAI_API_KEY",
-    "RESEND_API_KEY"
+    "RESEND_API_KEY",
   ];
 
   const missing = REQUIRED.filter(k => !process.env[k]);
 
-  const env = {};
-  for (const k of Object.keys(process.env)) {
-    env[k] = process.env[k] ? true : false;
-  }
+  /* ----------------------------------------
+     2) ROUTE CHECKER (GET + POST)
+  ---------------------------------------- */
+  async function testRoute(path) {
+    const full = `${BASE}${path}`;
 
-  /* ---------- ROUTE PING TESTS ---------- */
-  async function checkRoutePOST(path, body) {
+    // GET
+    let getStatus = null, getText = null;
     try {
-      const r = await fetch(`${process.env.VERCEL_URL ? "https://" + process.env.VERCEL_URL : ""}${path}`, {
+      const r = await fetch(full);
+      getStatus = r.status;
+      getText = await r.text();
+    } catch (e) {
+      getStatus = "NETWORK_ERR";
+      getText = String(e);
+    }
+
+    // POST
+    let postStatus = null, postText = null;
+    try {
+      const r = await fetch(full, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
+        body: JSON.stringify({ test: true }),
       });
-      const txt = await r.text();
-      return { ok: true, status: r.status, statusText: r.statusText, body: txt };
-    } catch (err) {
-      return { ok: false, error: err.toString() };
+      postStatus = r.status;
+      postText = await r.text();
+    } catch (e) {
+      postStatus = "NETWORK_ERR";
+      postText = String(e);
     }
+
+    function analyse(text, status) {
+      if (!text) return "EMPTY";
+      const t = text.trim();
+
+      if (t.startsWith("<!doctype html") || t.startsWith("<html"))
+        return "⚠️ HTML RESPONSE — LIKELY DEPLOYMENT PROTECTION";
+
+      if (status === 401)
+        return "❌ 401 UNAUTHORIZED — PROTECTED ROUTE";
+
+      if (status === 404)
+        return "❌ 404 NOT FOUND — FILE-BASED ROUTE MISSING";
+
+      if (status === 400)
+        return "✔️ 400 Bad Request — ROUTE ALIVE (form/data issue)";
+
+      if (status === 200)
+        return "✔️ 200 OK — ROUTE WORKING";
+
+      return `Unknown (${status})`;
+    }
+
+    return {
+      GET: {
+        status: getStatus,
+        analysis: analyse(getText, getStatus),
+      },
+      POST: {
+        status: postStatus,
+        analysis: analyse(postText, postStatus),
+      }
+    };
   }
 
-  const simSpiritual = await checkRoutePOST("/api/spiritual-report", {
-    question: "system test question",
-    email: "test@hazcam.io"
-  });
+  /* ----------------------------------------
+     3) SPIRITUAL-REPORT EMULATION
+     — Shopify-style POST with FormData
+  ---------------------------------------- */
+  async function simulateShopifyPOST() {
+    const url = `${BASE}/api/spiritual-report`;
+    let status = null, text = null;
 
-  /* ---------- PREMIUM TOKEN DEBUG ---------- */
-  let token = crypto.randomUUID();
-  await savePremiumSubmission(token, {
-    email: "test@hazcam.io",
-    question: "system-test"
-  });
+    try {
+      const form = new FormData();
+      form.append("question", "system-test");
+      form.append("email", "test@hazcam.io");
 
-  const loaded = await loadPremiumSubmission(token);
+      const r = await fetch(url, { method: "POST", body: form });
+      status = r.status;
+      text = await r.text();
+    } catch (e) {
+      status = "NETWORK_ERR";
+      text = String(e);
+    }
 
-  /* ---------- SALES FUNNEL DEBUG ---------- */
-  const tokenMissingFields = {
-    hasEmail: !!(loaded?.email),
-    hasFieldsBlock: !!(loaded?.fields),
-    savedFields: loaded?.fields || null
+    let diagnosis = "";
+    if (text.startsWith("<!doctype html"))
+      diagnosis = "🚨 BLOCKED — Vercel Authentication Page Returned";
+    else if (status === 400)
+      diagnosis = "✔️ ROUTE ALIVE — But form parsing failed";
+    else if (status === 200)
+      diagnosis = "🎉 SUCCESS — Route accepted Shopify-style request";
+
+    return { status, diagnosis, raw: text.slice(0, 300) };
+  }
+
+  /* ----------------------------------------
+     4) Run Tests
+  ---------------------------------------- */
+  const routes = {
+    spiritual: await testRoute("/api/spiritual-report"),
+    detailed: await testRoute("/api/detailed-report"),
+    technical: await testRoute("/api/technical-report"),
   };
 
-  /* ---------- FINAL RESPONSE ---------- */
-  res.status(200).json({
+  const shopifySim = await simulateShopifyPOST();
+
+  /* ----------------------------------------
+     5) Response
+  ---------------------------------------- */
+  return res.status(200).json({
     ok: true,
-    time_ms: Date.now() - started,
-    method: req.method,
-    IP: req.headers["x-real-ip"] || null,
-    REQUIRED_KEYS: REQUIRED,
-    MISSING_REQUIRED: missing,
-    ENV: env,
-
-    /* ROUTES */
-    ROUTES: {
-      spiritualReport: simSpiritual
+    time_ms: Date.now() - start,
+    BASE,
+    missingRequired: missing,
+    ENV: {
+      RECAPTCHA_TOGGLE: process.env.RECAPTCHA_TOGGLE,
+      TEST_MODE: process.env.TEST_MODE,
+      RESEND_FROM: process.env.RESEND_FROM,
+      SHOPIFY_STORE_DOMAIN: process.env.SHOPIFY_STORE_DOMAIN,
     },
-
-    /* PREMIUM STORE DEBUG */
-    PREMIUM_TOKEN_TEST: {
-      token,
-      loaded,
-      checks: tokenMissingFields
-    },
-
-    /* DIAGNOSTIC SUMMARY */
+    ROUTES: routes,
+    SHOPIFY_SIMULATION: shopifySim,
     DIAGNOSIS:
-      tokenMissingFields.hasEmail
-        ? "OK — spiritual-report appears to store email correctly."
-        : "FAIL — email NOT stored. spiritual-report is not receiving/processing email field."
+      shopifySim.diagnosis === "🚨 BLOCKED — Vercel Authentication Page Returned"
+        ? "💀 ROOT CAUSE CONFIRMED — DEPLOYMENT PROTECTION BLOCKING API ROUTES"
+        : "See results above."
   });
 }
