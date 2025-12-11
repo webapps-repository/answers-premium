@@ -18,7 +18,7 @@
       width:100%; padding:10px; border-radius:6px; border:1px solid #bbb; font-size:1rem;
     }
 
-    #personal-fields { display:block; } /* always visible now */
+    #personal-fields { display:block; } /* personal mode visible by default */
     #compat-fields { display:none; margin-top:20px; }
 
     .btn {
@@ -29,6 +29,7 @@
     }
 
     #get-btn { background:#6c63ff; color:white; }
+    #premium-btn { background:#1aa34a; color:#fff; display:none; }
 
     .summary-box {
       background:#f7f5ff; padding:14px;
@@ -38,7 +39,6 @@
 
     #status-text { margin-top:8px; font-size:0.9rem; color:#555; min-height:1em; }
 
-    /* Apple/Stripe Spinner */
     .spinner {
       display: none;
       width: 40px;
@@ -50,7 +50,7 @@
       animation: spin 0.9s linear infinite;
     }
 
-    @keyframes spin { 
+    @keyframes spin {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
@@ -80,8 +80,6 @@
 
   <form id="main-form" enctype="multipart/form-data">
 
-    <!-- Removed personal checkbox -->
-
     <!-- Compatibility Checkbox -->
     <div class="field" style="display:flex; align-items:center; gap:8px;">
       <input type="checkbox" id="isCompat" style="width:20px;height:20px;">
@@ -98,14 +96,13 @@
       <textarea id="question" name="question" maxlength="200"></textarea>
     </div>
 
-    <!-- technical upload (deprecated but kept per your rules) -->
-    <!-- REMOVE extra file upload in personal mode -->
+    <!-- technical upload (deprecated but retained) -->
     <div class="field" id="technical-field" style="display:none;">
       <label>Optional file upload</label>
       <input id="technicalFile" name="technicalFile" type="file">
     </div>
 
-    <!-- PERSONAL MODE ALWAYS ACTIVE -->
+    <!-- PERSONAL MODE -->
     <div id="personal-fields">
       <div class="field"><label>Full Name</label><input id="fullName"></div>
       <div class="field"><label>Date of Birth</label><input id="birthDate" type="date"></div>
@@ -120,7 +117,7 @@
       </div>
     </div>
 
-    <!-- COMPATIBILITY MODE FIELDS -->
+    <!-- COMPATIBILITY MODE -->
     <div id="compat-fields">
 
       <div class="compat-header">Your Details</div>
@@ -151,7 +148,7 @@
       <div id="recaptcha-box" style="min-height: 40px;"></div>
     </div>
 
-    <button id="get-btn" class="btn">Get Answer</button>
+    <button id="get-btn" class="btn" type="submit">Get Answer</button>
 
     <div id="spinner" class="spinner"></div>
     <div id="status-text"></div>
@@ -163,52 +160,70 @@
     <div id="summary-text" class="summary-box"></div>
   </div>
 
+  <!-- PREMIUM BUTTON (hidden until token arrives) -->
+  <button id="premium-btn" class="btn">Get Premium Insights</button>
+
 </div>
 
 <script src="https://www.google.com/recaptcha/api.js?render=6LfTYRcsAAAAADwIcyRkQ9mkyJXIYuaRavmT8D-f"></script>
 
 <script>
-/* API endpoints */
-const API_SPIRITUAL = "https://answers-rust.vercel.app/api/spiritual-report";
-const API_TECHNICAL = "https://answers-rust.vercel.app/api/technical-report";
+/* ============================
+   CONFIG
+============================ */
+const API_SPIRITUAL = "https://answers-premium.vercel.app/api/spiritual-report";
+const API_PREMIUM   = "https://answers-premium.vercel.app/api/detailed-report";
+
+const TEST_MODE = true;   // set false for live Shopify checkout
+const SHOPIFY_STORE = "{{ shop.permanent_domain }}";
+const VARIANT_ID = "47550793875608";
 
 let recaptchaToken = null;
+let premiumToken = null;
 
-/* recaptcha */
+/* ============================
+   RECAPTCHA
+============================ */
 function getRecaptchaToken() {
   return grecaptcha.execute("6LfTYRcsAAAAADwIcyRkQ9mkyJXIYuaRavmT8D-f", { action: "submit" })
     .then(t => (recaptchaToken = t));
 }
 
-/* elements */
-const isCompat = document.getElementById("isCompat");
+/* ============================
+   ELEMENTS
+============================ */
+const isCompat       = document.getElementById("isCompat");
 const personalFields = document.getElementById("personal-fields");
 const technicalField = document.getElementById("technical-field");
-const compatFields = document.getElementById("compat-fields");
+const compatFields   = document.getElementById("compat-fields");
 
-const emailEl = document.getElementById("email");
+const emailEl    = document.getElementById("email");
 const questionEl = document.getElementById("question");
 
 const summaryWrap = document.getElementById("summary");
 const summaryText = document.getElementById("summary-text");
-const spinner = document.getElementById("spinner");
-const statusText = document.getElementById("status-text");
+const spinner     = document.getElementById("spinner");
+const statusText  = document.getElementById("status-text");
+const premiumBtn  = document.getElementById("premium-btn");
 
-/* toggle compatibility */
+/* ============================
+   COMPATIBILITY TOGGLE
+============================ */
 isCompat.addEventListener("change", () => {
   if (isCompat.checked) {
     personalFields.style.display = "none";
-    compatFields.style.display = "block";
+    compatFields.style.display   = "block";
   } else {
     personalFields.style.display = "block";
-    compatFields.style.display = "none";
+    compatFields.style.display   = "none";
   }
-  
-  // technical field is always hidden now
+  // technical field remains hidden
   technicalField.style.display = "none";
 });
 
-/* submit */
+/* ============================
+   FORM SUBMIT → SPIRITUAL REPORT
+============================ */
 document.getElementById("main-form").addEventListener("submit", async e => {
   e.preventDefault();
 
@@ -218,8 +233,14 @@ document.getElementById("main-form").addEventListener("submit", async e => {
   spinner.style.display = "block";
   statusText.textContent = "Processing…";
 
-  const token = await getRecaptchaToken();
-  sendForm(token);
+  try {
+    const token = await getRecaptchaToken();
+    await sendForm(token);
+  } catch (err) {
+    console.error("reCAPTCHA error:", err);
+    spinner.style.display = "none";
+    alert("reCAPTCHA error.");
+  }
 });
 
 async function sendForm(token) {
@@ -234,7 +255,7 @@ async function sendForm(token) {
   if (isCompat.checked) {
     fd.append("mode", "compat");
 
-    fd.append("c1_fullName", document.getElementById("c1_fullName").value);
+    fd.append("c1_fullName",  document.getElementById("c1_fullName").value);
     fd.append("c1_birthDate", document.getElementById("c1_birthDate").value);
     fd.append("c1_birthTime", document.getElementById("c1_birthTime").value);
     fd.append("c1_birthPlace", [
@@ -246,7 +267,7 @@ async function sendForm(token) {
     const c1Palm = document.getElementById("c1_palm").files[0];
     if (c1Palm) fd.append("c1_palm", c1Palm);
 
-    fd.append("c2_fullName", document.getElementById("c2_fullName").value);
+    fd.append("c2_fullName",  document.getElementById("c2_fullName").value);
     fd.append("c2_birthDate", document.getElementById("c2_birthDate").value);
     fd.append("c2_birthTime", document.getElementById("c2_birthTime").value);
     fd.append("c2_birthPlace", [
@@ -257,11 +278,10 @@ async function sendForm(token) {
 
     const c2Palm = document.getElementById("c2_palm").files[0];
     if (c2Palm) fd.append("c2_palm", c2Palm);
-  }
 
-  else {
+  } else {
     /* regular personal mode */
-    fd.append("fullName", document.getElementById("fullName").value);
+    fd.append("fullName",  document.getElementById("fullName").value);
     fd.append("birthDate", document.getElementById("birthDate").value);
     fd.append("birthTime", document.getElementById("birthTime").value);
     fd.append("birthPlace", [
@@ -282,6 +302,7 @@ async function sendForm(token) {
     const r = await fetch(endpoint, { method: "POST", body: fd });
     out = await r.json();
   } catch (err) {
+    console.error("API error:", err);
     spinner.style.display = "none";
     alert("Server error.");
     return;
@@ -289,12 +310,67 @@ async function sendForm(token) {
 
   spinner.style.display = "none";
 
+  // live debug block (optional, nice for you)
+  let dbg = document.getElementById("live-debug");
+  if (!dbg) {
+    dbg = document.createElement("pre");
+    dbg.id = "live-debug";
+    dbg.style.background = "#2b0000";
+    dbg.style.color = "#00ff9c";
+    dbg.style.padding = "14px";
+    dbg.style.marginTop = "20px";
+    dbg.style.whiteSpace = "pre-wrap";
+    dbg.style.fontSize = "12px";
+    dbg.style.borderRadius = "8px";
+    dbg.style.border = "2px solid red";
+    document.getElementById("wrapper").appendChild(dbg);
+  }
+  dbg.innerText = "✅ RAW API RESPONSE:\\n\\n" + JSON.stringify(out, null, 2);
+
   summaryText.innerHTML = out.shortAnswer || "(No answer)";
   summaryWrap.style.display = "block";
 
   statusText.textContent = "Your full report has been emailed.";
   alert("Your full report has been emailed!");
+
+  // PREMIUM TOKEN HANDLING
+  if (out.premiumToken) {
+    premiumToken = out.premiumToken;
+    premiumBtn.style.display = "block";
+    console.log("✅ PREMIUM TOKEN:", premiumToken);
+  } else {
+    premiumToken = null;
+    premiumBtn.style.display = "none";
+    console.warn("⚠️ No premiumToken in response.");
+  }
 }
+
+/* ============================
+   PREMIUM BUTTON → DETAILED REPORT
+============================ */
+premiumBtn.addEventListener("click", async () => {
+  if (!premiumToken) {
+    alert("Missing premium token – please submit a question first.");
+    return;
+  }
+
+  if (TEST_MODE) {
+    try {
+      await fetch(API_PREMIUM, {
+        method: "POST",
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify({ premiumToken })
+      });
+      alert("✅ Premium report sent!");
+    } catch (err) {
+      console.error("Premium error:", err);
+      alert("Error sending premium report.");
+    }
+  } else {
+    const url = `https://${SHOPIFY_STORE}/cart/${VARIANT_ID}:1?attributes[premiumToken]=${encodeURIComponent(premiumToken)}`;
+    window.location.href = url;
+  }
+});
 </script>
 
 </body>
