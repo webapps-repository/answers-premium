@@ -13,7 +13,9 @@ export default async function handler(req, res) {
 
   console.log("🔥 SPIRITUAL REPORT HIT");
 
-  /* ✅ FULL CORS */
+  /* -----------------------------
+        CORS
+  ----------------------------- */
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
   res.setHeader(
@@ -24,7 +26,9 @@ export default async function handler(req, res) {
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") return res.status(405).json({ error: "Not allowed" });
 
-  /* ✅ FORM PARSE */
+  /* -----------------------------
+        FORM PARSE
+  ----------------------------- */
   const form = formidable({ multiples: true, keepExtensions: true });
   let fields = {}, files = {};
 
@@ -39,23 +43,72 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: "Bad form data" });
   }
 
-  const question = normalize(fields, "question");
+  /* -----------------------------
+        BASIC FIELDS
+  ----------------------------- */
   const email = normalize(fields, "email");
+  const question = normalize(fields, "question");
+  const mode = normalize(fields, "mode") || "personal";
 
-  if (!question || !email) {
-    return res.status(400).json({ error: "Missing question or email" });
+  if (!email || !question) {
+    return res.status(400).json({ error: "Missing required email or question" });
   }
 
-  /* ✅ AI */
-  const enginesOut = await runAllEngines({
-    question,
-    mode: "personal",
-    uploadedFile: null,
-    compat1: null,
-    compat2: null,
-    palm1File: null,
-    palm2File: null
-  });
+  /* -----------------------------
+        PERSONAL MODE DATA
+  ----------------------------- */
+  let personal = null;
+
+  if (mode === "personal") {
+    personal = {
+      fullName: normalize(fields, "fullName"),
+      birthDate: normalize(fields, "birthDate"),
+      birthTime: normalize(fields, "birthTime"),
+      birthPlace: normalize(fields, "birthPlace"),
+      palmImage: files?.palmImage || null,
+      technicalFile: files?.technicalFile || null
+    };
+  }
+
+  /* -----------------------------
+        COMPATIBILITY MODE DATA
+  ----------------------------- */
+  let compat1 = null, compat2 = null;
+
+  if (mode === "compat") {
+    compat1 = {
+      fullName: normalize(fields, "c1_fullName"),
+      birthDate: normalize(fields, "c1_birthDate"),
+      birthTime: normalize(fields, "c1_birthTime"),
+      birthPlace: normalize(fields, "c1_birthPlace"),
+      palmImage: files?.c1_palm || null
+    };
+
+    compat2 = {
+      fullName: normalize(fields, "c2_fullName"),
+      birthDate: normalize(fields, "c2_birthDate"),
+      birthTime: normalize(fields, "c2_birthTime"),
+      birthPlace: normalize(fields, "c2_birthPlace"),
+      palmImage: files?.c2_palm || null
+    };
+  }
+
+  /* -----------------------------
+        RUN ENGINES
+  ----------------------------- */
+  let enginesOut;
+  try {
+    enginesOut = await runAllEngines({
+      question,
+      mode,
+      personal,
+      compat1,
+      compat2
+    });
+  } catch (err) {
+    console.error("❌ ENGINE FAILURE", err);
+    return res.status(500).json({ error: "Engine processing failed" });
+  }
 
   const shortHTML = `
   <div style="font-family:system-ui;">
@@ -65,35 +118,31 @@ export default async function handler(req, res) {
   </div>
   `;
 
-  /* ✅ TOKEN */
+  /* -----------------------------
+        PREMIUM TOKEN SAVE
+  ----------------------------- */
   const premiumToken = crypto.randomUUID();
-  await savePremiumSubmission(premiumToken, { fields });
+  await savePremiumSubmission(premiumToken, { fields, mode });
 
-  const SHOPIFY_STORE = process.env.SHOPIFY_STORE_DOMAIN;
-  const VARIANT_ID = "47550793875608";
+  /* -----------------------------
+        SEND EMAIL SUMMARY
+  ----------------------------- */
+  try {
+    await sendEmailHTML({
+      to: email,
+      subject: "Your Reading",
+      html: shortHTML
+    });
+  } catch (err) {
+    console.error("❌ EMAIL FAILURE", err);
+  }
 
-  const premiumLink =
-    `https://${SHOPIFY_STORE}/cart/${VARIANT_ID}:1?attributes[premiumToken]=${encodeURIComponent(premiumToken)}`;
-
-  const html = `
-    <div style="padding:20px;">
-      ${shortHTML}
-      <a href="${premiumLink}" style="display:block;margin-top:20px;">
-        Unlock Premium
-      </a>
-    </div>
-  `;
-
-  await sendEmailHTML({
-    to: email,
-    subject: "Your Reading",
-    html
-  });
-
+  /* -----------------------------
+        RESPONSE TO SHOPIFY
+  ----------------------------- */
   return res.status(200).json({
     ok: true,
     shortAnswer: shortHTML,
-    premiumToken,
-    debug: true
+    premiumToken
   });
 }
