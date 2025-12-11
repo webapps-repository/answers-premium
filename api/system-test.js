@@ -1,12 +1,14 @@
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+import { createClient } from "redis";
+
 export default async function handler(req, res) {
   const started = Date.now();
 
-  /* -------------------------------
-     HELPER: Check Required ENV Keys
-  -------------------------------- */
+  /* -------------------------------------------------
+     REQUIRED ENV
+  ------------------------------------------------- */
   const REQUIRED = [
     "RECAPTCHA_SECRET_KEY",
     "RECAPTCHA_TOGGLE",
@@ -16,35 +18,43 @@ export default async function handler(req, res) {
 
   const missingRequired = REQUIRED.filter(k => !process.env[k]);
 
-  /* -------------------------------
-     HELPER: Check Route Health
-     - GET 401 → OK (POST-only endpoint)
-     - 404 → File missing
-     - 500 → Function crash
-  -------------------------------- */
+  /* -------------------------------------------------
+     ROUTE CHECKER — GET + POST Health
+  ------------------------------------------------- */
   async function checkRoute(path) {
+    const base = `http://${req.headers.host}${path}`;
+
+    // --- GET should give 401 or 405 (allowed)
+    let getCheck = {};
     try {
-      const r = await fetch(`http://${req.headers.host}${path}`, {
-        method: "GET"
-      });
-
-      if (r.status === 401) {
-        return { ok: true, status: 401, statusText: "Active (POST required)" };
-      }
-
+      const r = await fetch(base, { method: "GET" });
       if (r.status === 404) {
-        return { ok: false, status: 404, statusText: "Not Found" };
+        getCheck = { ok: false, status: 404, statusText: "Not Found" };
+      } else if (r.status === 500) {
+        getCheck = { ok: false, status: 500, statusText: "Server Error" };
+      } else {
+        getCheck = { ok: true, status: r.status, statusText: "Alive" };
       }
-
-      if (r.status >= 500) {
-        return { ok: false, status: r.status, statusText: "Server Error" };
-      }
-
-      return { ok: true, status: r.status, statusText: "Available" };
-
-    } catch (err) {
-      return { ok: false, status: 0, statusText: "Network Error" };
+    } catch {
+      getCheck = { ok: false, status: 0, statusText: "Network Error" };
     }
+
+    // --- POST (without body) should NOT be 404
+    let postCheck = {};
+    try {
+      const r = await fetch(base, { method: "POST" });
+      if (r.status === 404) {
+        postCheck = { ok: false, status: 404, statusText: "Not Found" };
+      } else if (r.status >= 500) {
+        postCheck = { ok: false, status: r.status, statusText: "Server Error" };
+      } else {
+        postCheck = { ok: true, status: r.status, statusText: "Accepting POST" };
+      }
+    } catch {
+      postCheck = { ok: false, status: 0, statusText: "Network Error" };
+    }
+
+    return { GET: getCheck, POST: postCheck };
   }
 
   const ROUTES = {
@@ -53,56 +63,69 @@ export default async function handler(req, res) {
     technicalReport: await checkRoute("/api/technical-report"),
   };
 
-  /* -------------------------------
-     HELPER: Test OpenAI
-  -------------------------------- */
+  /* -------------------------------------------------
+     OPENAI TEST
+  ------------------------------------------------- */
   async function testOpenAI() {
-    if (!process.env.OPENAI_API_KEY) return { ok: false, error: "Missing key" };
+    if (!process.env.OPENAI_API_KEY)
+      return { ok: false, error: "Missing OPENAI key" };
 
+    return { ok: true, response: "pong!" };
+  }
+
+  /* -------------------------------------------------
+     RESEND EMAIL TEST (no send)
+  ------------------------------------------------- */
+  async function testEmail() {
+    if (!process.env.RESEND_API_KEY)
+      return { ok: false, error: "Missing RESEND_API_KEY" };
+
+    return { ok: true };
+  }
+
+  /* -------------------------------------------------
+     RECAPTCHA CHECK
+  ------------------------------------------------- */
+  async function testRecaptcha() {
+    const toggle = String(process.env.RECAPTCHA_TOGGLE);
+    if (toggle === "false") return { ok: true, bypass: true };
+    return { ok: false, error: "Recaptcha enabled but not tested" };
+  }
+
+  /* -------------------------------------------------
+     REDIS — FULL READ/WRITE TEST
+  ------------------------------------------------- */
+  async function testRedis() {
+    if (!process.env.REDIS_URL)
+      return { ok: false, error: "Missing REDIS_URL" };
+
+    const client = createClient({ url: process.env.REDIS_URL });
     try {
-      return { ok: true, response: "pong!" };
+      await client.connect();
+      const key = "system_test_key";
+      const value = "test:" + Date.now();
+
+      await client.set(key, value, { EX: 15 });
+      const back = await client.get(key);
+
+      await client.quit();
+
+      return {
+        ok: back === value,
+        wrote: value,
+        read: back
+      };
     } catch (err) {
       return { ok: false, error: err.message };
     }
   }
 
-  /* -------------------------------
-     HELPER: Test Resend Email
-     NOTE → does NOT send a real email
-  -------------------------------- */
-  async function testEmail() {
-    if (!process.env.RESEND_API_KEY) {
-      return { ok: false, error: "Missing RESEND_API_KEY" };
-    }
+  const redisResult = await testRedis();
 
-    return { ok: true, error: null };
-  }
-
-  /* -------------------------------
-     HELPER: Test Recaptcha
-     When disabled → auto-pass
-  -------------------------------- */
-  async function testRecaptcha() {
-    if (String(process.env.RECAPTCHA_TOGGLE) === "false") {
-      return { ok: true, bypass: true };
-    }
-    return { ok: false, error: "Recaptcha enabled but not tested here" };
-  }
-
-  /* -------------------------------
-     HELPER: List API Files
-     (Cannot access filesystem on Vercel edge,
-      but we include a placeholder.)
-  -------------------------------- */
-  const API_FILES = {
-    files: ["system-test.js"],
-    error: null
-  };
-
-  /* -------------------------------
-     BUILD RESPONSE OBJECT
-  -------------------------------- */
-  const out = {
+  /* -------------------------------------------------
+     RESPONSE PAYLOAD
+  ------------------------------------------------- */
+  res.status(200).json({
     ok: missingRequired.length === 0,
     time_ms: Date.now() - started,
     method: req.method,
@@ -134,25 +157,18 @@ export default async function handler(req, res) {
       EMAIL_FROM: !!process.env.EMAIL_FROM,
       EMAIL_SUBJECT_PREMIUM: !!process.env.EMAIL_SUBJECT_PREMIUM,
 
-      LANG: !!process.env.LANG,
       REDIS_URL: !!process.env.REDIS_URL,
-
       RESEND_API_KEY: !!process.env.RESEND_API_KEY,
       RESEND_FROM: !!process.env.RESEND_FROM,
-
       SHOPIFY_STORE_DOMAIN: !!process.env.SHOPIFY_STORE_DOMAIN,
       SHOPIFY_WEBHOOK_SECRET: !!process.env.SHOPIFY_WEBHOOK_SECRET,
-
       OPENAI_API_KEY: !!process.env.OPENAI_API_KEY
     },
 
-    API_FILES,
     ROUTES,
-
     RECAPTCHA: await testRecaptcha(),
     OPENAI_TEST: await testOpenAI(),
-    EMAIL_TEST: await testEmail()
-  };
-
-  res.status(200).json(out);
+    EMAIL_TEST: await testEmail(),
+    REDIS_TEST: redisResult
+  });
 }
