@@ -18,7 +18,8 @@
     "openai": "^4.58.1",
     "resend": "^6.5.0",
     "pdf-lib": "^1.17.1",
-    "redis": "^4.6.7"
+    "redis": "^4.6.7",
+    "jsonwebtoken": "^9.0.3"
   }
 }
 
