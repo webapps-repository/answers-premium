@@ -1,8 +1,10 @@
+// api/spiritual-report.js
+
 export const config = { runtime: "nodejs" };
 
-import formidable from "formidable";
 import jwt from "jsonwebtoken";
 import { Resend } from "resend";
+import busboy from "busboy";
 
 import { verifyRecaptcha } from "../lib/utils.js";
 import { generateInsights } from "../lib/insights.js";
@@ -26,13 +28,28 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    // ---- Parse FormData (Shopify sends multipart/form-data)
-    const form = formidable({ multiples: false });
+    // ---------------------------
+    // BUSBOY PARSING (fixes Vercel streaming bug)
+    // ---------------------------
+    const bb = busboy({ headers: req.headers });
+    const fields = {};
 
-    const { fields } = await new Promise((resolve, reject) =>
-      form.parse(req, (err, f) => (err ? reject(err) : resolve({ fields: f })))
-    );
+    const parsePromise = new Promise((resolve, reject) => {
+      bb.on("field", (name, value) => {
+        fields[name] = value;
+      });
 
+      // NOTE: your system doesn’t use uploaded palm images yet in premium
+      bb.on("file", () => {});
+
+      bb.on("finish", resolve);
+      bb.on("error", reject);
+    });
+
+    req.pipe(bb);
+    await parsePromise;
+
+    // Extract fields
     const email = fields.email;
     const question = fields.question || "";
     const recaptchaToken = fields.recaptchaToken;
@@ -40,25 +57,25 @@ export default async function handler(req, res) {
     if (!email || !question)
       return res.status(400).json({ error: "Missing required fields" });
 
-    // ---- Verify recaptcha
+    // RECAPTCHA VERIFY
     const isHuman = await verifyRecaptcha(recaptchaToken);
     if (!isHuman)
       return res.status(400).json({ error: "Recaptcha validation failed" });
 
-    // ---- Generate short answer
+    // GENERATE AI SHORT ANSWER
     const shortAnswer = await generateInsights({
       question,
       personal: fields
     });
 
-    // ---- Create JWT premium token
+    // JWT PREMIUM TOKEN
     const premiumToken = jwt.sign(
       { email, created: Date.now() },
       process.env.PREMIUM_SECRET,
       { expiresIn: "15m" }
     );
 
-    // ---- Email user using RESEND
+    // SEND EMAIL USING RESEND
     await resend.emails.send({
       from: process.env.RESEND_FROM,
       to: email,
@@ -69,7 +86,7 @@ export default async function handler(req, res) {
         <h3>Your Answer</h3>
         <p>${shortAnswer}</p>
         <p><strong>Premium Token:</strong> ${premiumToken}</p>
-        <p>Return to the website and press “Get Premium Insights”.</p>
+        <p>Press “Get Premium Insights” back on the website.</p>
       `
     });
 
