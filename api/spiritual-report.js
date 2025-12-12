@@ -1,4 +1,8 @@
 // /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+// /api/spiritual-report.js
+
 export const config = { runtime: "nodejs" };
 
 import jwt from "jsonwebtoken";
