@@ -1,3 +1,5 @@
+// api/detailed-report.js
+
 export const config = { runtime: "nodejs" };
 
 import jwt from "jsonwebtoken";
@@ -23,7 +25,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    // ---- Read raw body (Shopify sends text/plain JSON)
+    // Read raw text body
     let raw = "";
     for await (const chunk of req) raw += chunk;
 
@@ -38,23 +40,23 @@ export default async function handler(req, res) {
     if (!premiumToken)
       return res.status(400).json({ error: "Missing premium token" });
 
-    // ---- Verify JWT token
+    // Verify token
     let decoded;
     try {
       decoded = jwt.verify(premiumToken, process.env.PREMIUM_SECRET);
-    } catch (err) {
+    } catch {
       return res.status(400).json({ error: "Token expired or invalid" });
     }
 
     const email = decoded.email;
 
-    // ---- Generate PDF premium report
+    // Generate PDF
     const pdfBuffer = await generatePDF({
       email,
       created: new Date(decoded.created).toLocaleString()
     });
 
-    // ---- Email PDF via Resend
+    // Send PDF email using Resend
     await resend.emails.send({
       from: process.env.RESEND_FROM,
       to: email,
