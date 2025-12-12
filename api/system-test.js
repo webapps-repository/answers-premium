@@ -1,40 +1,66 @@
-// /api/system-test.js V8 from chatgpt
+// /api/system-test.js V9 from chatgpt
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export default async function handler(req, res) {
-  const pathTest = async (path) => {
+  console.log("🔧 SYSTEM TEST V9 START");
+
+  const base = `https://${req.headers.host}`;
+
+  async function check(path, payload) {
     try {
-      const r = await fetch(`https://${process.env.VERCEL_URL}${path}`, {
+      const r = await fetch(base + path, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: "{}"
+        headers: { "Content-Type": "text/plain" },
+        body: JSON.stringify(payload || { hello: "world" })
       });
+
+      let t = null;
+      try {
+        t = await r.json();
+      } catch {}
 
       return {
         path,
         status: r.status,
         ok: r.ok,
-        statusText: r.statusText
+        statusText: r.statusText,
+        response: t
       };
     } catch (err) {
-      return { path, error: err.message };
+      return { path, error: err + "" };
     }
-  };
+  }
 
-  const results = {
-    vercelURL: process.env.VERCEL_URL,
+  const results = {};
+
+  // ---------------------------
+  // ROUTE TESTS
+  // ---------------------------
+  results.detailed_missing_token = await check(
+    "/api/detailed-report",
+    {}
+  );
+
+  results.detailed_fake_token = await check(
+    "/api/detailed-report",
+    { premiumToken: "fake" }
+  );
+
+  results.spiritual = await check(
+    "/api/spiritual-report",
+    { email: "test@test.com", question: "hi" }
+  );
+
+  // ---------------------------
+  // FINISH
+  // ---------------------------
+  console.log("🔧 SYSTEM TEST V9 COMPLETE");
+  return res.status(200).json({
+    ok: true,
+    vercelURL: base,
     timestamp: Date.now(),
-    routes: {
-      spiritual: await pathTest("/api/spiritual-report"),
-      detailed: await pathTest("/api/detailed-report"),
-      email: await pathTest("/api/email-test")
-    }
-  };
-
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Content-Type", "application/json");
-  res.status(200).json(results);
+    results
+  });
 }
-
