@@ -25,55 +25,69 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    // Read raw text body
     let raw = "";
     for await (const chunk of req) raw += chunk;
 
     let data;
     try {
       data = JSON.parse(raw);
-    } catch {
+    } catch (err) {
+      console.error("❌ JSON PARSE ERROR", err, raw);
       return res.status(400).json({ error: "Invalid JSON" });
     }
 
     const premiumToken = data.premiumToken;
-    if (!premiumToken)
-      return res.status(400).json({ error: "Missing premium token" });
+    if (!premiumToken) return res.status(400).json({ error: "Missing premium token" });
 
-    // Verify token
     let decoded;
     try {
       decoded = jwt.verify(premiumToken, process.env.PREMIUM_SECRET);
-    } catch {
+    } catch (err) {
+      console.error("❌ JWT VERIFY ERROR", err);
       return res.status(400).json({ error: "Token expired or invalid" });
     }
 
     const email = decoded.email;
+    if (!email) return res.status(400).json({ error: "Invalid token payload" });
 
-    // Generate PDF
-    const pdfBuffer = await generatePDF({
-      email,
-      created: new Date(decoded.created).toLocaleString()
-    });
+    console.log("🔵 Generating PDF for:", email);
 
-    // Send PDF email using Resend
-    await resend.emails.send({
-      from: process.env.RESEND_FROM,
-      to: email,
-      subject: "Your Premium Report",
-      html: `<h2>Your Premium Report</h2><p>Your PDF is attached.</p>`,
-      attachments: [
-        {
-          filename: "premium-report.pdf",
-          content: pdfBuffer.toString("base64"),
-          encoding: "base64"
-        }
-      ]
-    });
+    let pdfBuffer;
+    try {
+      pdfBuffer = await generatePDF({
+        email,
+        created: new Date(decoded.created).toLocaleString()
+      });
+    } catch (err) {
+      console.error("❌ PDF GENERATION ERROR:", err);
+      return res.status(500).json({ error: "PDF generation failed" });
+    }
+
+    console.log("🔵 Sending premium email via Resend…");
+
+    try {
+      await resend.emails.send({
+        from: process.env.RESEND_FROM,
+        to: email,
+        subject: "Your Premium Report",
+        html: `<h2>Your Premium Report</h2><p>Your PDF is attached.</p>`,
+        attachments: [
+          {
+            filename: "premium-report.pdf",
+            content: pdfBuffer.toString("base64"),
+            encoding: "base64"
+          }
+        ]
+      });
+    } catch (err) {
+      console.error("❌ RESEND SEND ERROR:", err);
+      return res.status(500).json({ error: "Email send failed" });
+    }
 
     return res.json({ ok: true, status: "Premium report sent" });
+
   } catch (err) {
-    console.error("DETAILED ERROR:", err);
+    console.error("❌ UNEXPECTED SERVER ERROR:", err);
     return res.status(500).json({ error: "Server error" });
   }
 }
