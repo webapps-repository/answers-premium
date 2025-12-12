@@ -1,108 +1,77 @@
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+export const config = { runtime: "nodejs" };
 
-import { sendEmailHTML } from "../lib/utils.js";
-import { loadPremiumSubmission, deletePremiumSubmission } from "../lib/premium-store.js";
+import jwt from "jsonwebtoken";
+import { Resend } from "resend";
+import { generatePDF } from "../lib/pdf.js";
 
-export default async function handler(req, res) {
-  console.log("🔥 DETAILED REPORT HIT");
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-  // ---------------------------
-  // CORS
-  // ---------------------------
+function allowCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader(
     "Access-Control-Allow-Headers",
-    "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+    "Content-Type, Authorization, X-Requested-With"
   );
+}
+
+export default async function handler(req, res) {
+  allowCors(res);
 
   if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST")
-    return res.status(405).json({ error: "Not allowed" });
-
-  // ---------------------------
-  // RAW BODY PARSE
-  // Accepts:
-  //   - text/plain JSON
-  //   - application/json
-  // ---------------------------
-  let raw = "";
-  for await (const chunk of req) raw += chunk;
-
-  console.log("📥 RAW BODY:", raw);
-
-  let body = {};
-  try {
-    body = raw ? JSON.parse(raw) : {};
-  } catch (err) {
-    console.error("❌ JSON PARSE ERROR IN detailed-report.js:", err, raw);
-    return res.status(400).json({ error: "Invalid JSON" });
-  }
-
-  console.log("📦 PARSED BODY:", body);
-
-  // ---------------------------
-  // Extract premiumToken
-  // ---------------------------
-  const premiumToken =
-    body?.premiumToken ||
-    body?.token ||
-    body?.attributes?.premiumToken ||
-    null;
-
-  console.log("🔑 PREMIUM TOKEN RECEIVED:", premiumToken);
-
-  if (!premiumToken) {
-    return res.status(400).json({ error: "Missing premium token" });
-  }
-
-  // ---------------------------
-  // Load stored submission
-  // ---------------------------
-  let submission = null;
-  try {
-    submission = await loadPremiumSubmission(premiumToken);
-  } catch (err) {
-    console.error("❌ ERROR LOADING PREMIUM TOKEN:", err);
-  }
-
-  console.log("📦 LOADED SUBMISSION:", submission);
-
-  if (!submission) {
-    return res.status(400).json({ error: "Token expired or invalid" });
-  }
-
-  // ---------------------------
-  // Build HTML email
-  // ---------------------------
-  const emailHTML = `
-    <div style="font-family: system-ui; padding: 20px;">
-      <h2>Your Premium Insights</h2>
-      <p>${submission.shortAnswer || "No short answer provided."}</p>
-      <hr />
-      <pre>${JSON.stringify(submission, null, 2)}</pre>
-    </div>
-  `;
+    return res.status(405).json({ error: "Method not allowed" });
 
   try {
-    await sendEmailHTML({
-      to: submission.email,
-      subject: "Your Premium Report",
-      html: emailHTML
+    // ---- Read raw body (Shopify sends text/plain JSON)
+    let raw = "";
+    for await (const chunk of req) raw += chunk;
+
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      return res.status(400).json({ error: "Invalid JSON" });
+    }
+
+    const premiumToken = data.premiumToken;
+    if (!premiumToken)
+      return res.status(400).json({ error: "Missing premium token" });
+
+    // ---- Verify JWT token
+    let decoded;
+    try {
+      decoded = jwt.verify(premiumToken, process.env.PREMIUM_SECRET);
+    } catch (err) {
+      return res.status(400).json({ error: "Token expired or invalid" });
+    }
+
+    const email = decoded.email;
+
+    // ---- Generate PDF premium report
+    const pdfBuffer = await generatePDF({
+      email,
+      created: new Date(decoded.created).toLocaleString()
     });
-    console.log("📨 PREMIUM EMAIL SENT TO:", submission.email);
-  } catch (err) {
-    console.error("❌ EMAIL SEND ERROR:", err);
-    return res.status(500).json({ error: "Failed to send premium email" });
-  }
 
-  // OPTIONAL: Delete token after use to prevent reuse
-  try {
-    await deletePremiumSubmission(premiumToken);
-  } catch (err) {
-    console.warn("⚠️ Could not delete premium token:", err);
-  }
+    // ---- Email PDF via Resend
+    await resend.emails.send({
+      from: process.env.RESEND_FROM,
+      to: email,
+      subject: "Your Premium Report",
+      html: `<h2>Your Premium Report</h2><p>Your PDF is attached.</p>`,
+      attachments: [
+        {
+          filename: "premium-report.pdf",
+          content: pdfBuffer.toString("base64"),
+          encoding: "base64"
+        }
+      ]
+    });
 
-  return res.status(200).json({ ok: true, message: "Premium report sent" });
+    return res.json({ ok: true, status: "Premium report sent" });
+  } catch (err) {
+    console.error("DETAILED ERROR:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
 }
