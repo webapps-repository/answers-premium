@@ -1,4 +1,7 @@
 // /api/system-test.js V9 from chatgpt
+//
+// shopify debug - https://zzqejx-u8.myshopify.com/pages/answers-premium?debug=1
+//
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
