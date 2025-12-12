@@ -1,0 +1,26 @@
+{
+  "name": "answers",
+  "version": "2.2.2",
+  "type": "module",
+  "engines": { "node": "22.x" },
+
+  "scripts": {
+    "build": "echo 'Build complete'",
+    "start": "node api/spiritual-report.js"
+  },
+
+  "dependencies": {
+    "busboy": "^1.6.0",
+    "pdfkit": "^0.17.2",
+    "astronomy-engine": "^2.1.19",
+    "formidable": "^3.5.1",
+    "get-stream": "^6.0.1",
+    "luxon": "^3.5.0",
+    "node-fetch": "^3.3.2",
+    "openai": "^4.58.1",
+    "resend": "^6.5.0",
+    "pdf-lib": "^1.17.1",
+    "redis": "^4.6.7",
+    "jsonwebtoken": "^9.0.3"
+  }
+}
