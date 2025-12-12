@@ -171,8 +171,10 @@
 /* ============================
    CONFIG
 ============================ */
-const API_SPIRITUAL = "https://answers-premium.vercel.app/api/spiritual-report";
-const API_PREMIUM   = "https://answers-premium.vercel.app/api/detailed-report";
+
+const API_BASE = "https://answers-premium.vercel.app";
+const API_SPIRITUAL = `${API_BASE}/api/spiritual-report`;
+const API_PREMIUM   = `${API_BASE}/api/detailed-report`;
 
 const TEST_MODE = true;   // set false for live Shopify checkout
 const SHOPIFY_STORE = "{{ shop.permanent_domain }}";
@@ -371,6 +373,159 @@ premiumBtn.addEventListener("click", async () => {
     window.location.href = url;
   }
 });
+</script>
+
+<script>
+/* ======================================================
+   SHOPIFY PREMIUM DEBUG MODE
+   Use: add ?debug=1 to URL
+   Example: https://zzeqjx-u8.myshopify.com/pages/answers-premium?debug=1
+   ====================================================== */
+
+(function() {
+  const url = new URL(window.location.href);
+  const DEBUG = url.searchParams.get("debug") === "1";
+  if (!DEBUG) return;
+
+  console.log("🟢 PREMIUM DEBUG MODE ENABLED");
+
+  // --------------------------------------------
+  // Build floating debug console
+  // --------------------------------------------
+  const box = document.createElement("div");
+  box.id = "premium-debug-box";
+  box.style.position = "fixed";
+  box.style.bottom = "20px";
+  box.style.right = "20px";
+  box.style.width = "380px";
+  box.style.maxHeight = "70vh";
+  box.style.overflowY = "auto";
+  box.style.background = "rgba(0,0,0,0.92)";
+  box.style.color = "#00ff9c";
+  box.style.padding = "15px";
+  box.style.border = "2px solid #ff0066";
+  box.style.borderRadius = "10px";
+  box.style.fontFamily = "monospace";
+  box.style.fontSize = "12px";
+  box.style.zIndex = "999999";
+  box.style.whiteSpace = "pre-wrap";
+  box.innerHTML = "🟢 PREMIUM DEBUG MODE\n\nWaiting for events…\n";
+  document.body.appendChild(box);
+
+  function log(msg) {
+    box.innerText += "\n" + msg;
+    box.scrollTop = box.scrollHeight;
+  }
+
+  // --------------------------------------------
+  // INTERCEPT premium-token creation & usage
+  // --------------------------------------------
+  window.__debugPremium = {
+    setToken(t) {
+      log("🔑 premiumToken SET → " + JSON.stringify(t));
+      window.__premiumTokenDebug = t;
+    },
+    getToken() {
+      log("🔍 premiumToken READ → " + JSON.stringify(window.__premiumTokenDebug));
+      return window.__premiumTokenDebug;
+    }
+  };
+
+  // Monkey-patch assign to catch spiritual-report response
+  const oldAssign = Object.assign;
+  Object.assign = function(target, source) {
+    if (source && source.premiumToken) {
+      log("📦 spiritual-report returned premiumToken → " + source.premiumToken);
+      window.__debugPremium.setToken(source.premiumToken);
+    }
+    return oldAssign(target, source);
+  };
+
+  // --------------------------------------------
+  // Intercept fetch calls to detailed-report
+  // --------------------------------------------
+  const oldFetch = window.fetch;
+  window.fetch = async function(url, opts) {
+    if (typeof url === "string" && url.includes("/api/detailed-report")) {
+      log("\n🚀 FETCH → /api/detailed-report");
+      log("Headers:\n" + JSON.stringify(opts?.headers || {}, null, 2));
+      log("Body:\n" + (opts?.body || "(none)"));
+    }
+
+    const res = await oldFetch(url, opts);
+
+    if (typeof url === "string" && url.includes("/api/detailed-report")) {
+      const cloned = res.clone();
+      let out = "";
+      try { out = await cloned.text(); } catch {}
+      log("⬅ RESPONSE:\n" + out);
+    }
+
+    return res;
+  };
+
+  // --------------------------------------------
+  // Add manual test buttons (Amazing for debugging)
+  // --------------------------------------------
+  const btns = document.createElement("div");
+  btns.style.marginTop = "15px";
+  btns.innerHTML = `
+    <button id="dbg-test-spiritual" style="margin-bottom:8px;width:100%;padding:6px;background:#4e7bff;color:white;border:none;border-radius:4px;">
+      Test Spiritual Report
+    </button>
+    <button id="dbg-test-detailed" style="margin-bottom:8px;width:100%;padding:6px;background:#1aaa55;color:white;border:none;border-radius:4px;">
+      Test Detailed Report (using stored premiumToken)
+    </button>
+    <button id="dbg-clear" style="width:100%;padding:6px;background:#ff0066;color:white;border:none;border-radius:4px;">
+      Clear Log
+    </button>
+  `;
+  box.appendChild(btns);
+
+  document.getElementById("dbg-clear").onclick = () => {
+    box.innerText = "🟢 PREMIUM DEBUG MODE\n\n(Log cleared)\n";
+  };
+
+  document.getElementById("dbg-test-spiritual").onclick = async () => {
+    log("🧪 Sending TEST request → spiritual-report");
+
+    const fd = new FormData();
+    fd.append("email", "debug@test.com");
+    fd.append("question", "debug test");
+    fd.append("recaptchaToken", "debug");
+
+    const r = await fetch("https://answers-premium.vercel.app/api/spiritual-report", {
+      method: "POST",
+      body: fd
+    });
+
+    const out = await r.text();
+    log("Response:\n" + out);
+  };
+
+  document.getElementById("dbg-test-detailed").onclick = async () => {
+    log("🧪 TEST detailed-report");
+
+    const token = window.__debugPremium.getToken();
+    if (!token) {
+      log("❌ No premiumToken available. Submit a question first.");
+      return;
+    }
+
+    const payload = JSON.stringify({ premiumToken: token });
+
+    log("Sending payload:\n" + payload);
+
+    const r = await fetch("https://answers-premium.vercel.app/api/detailed-report", {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: payload
+    });
+
+    const out = await r.text();
+    log("Response:\n" + out);
+  };
+})();
 </script>
 
 </body>
