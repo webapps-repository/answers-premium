@@ -10,6 +10,7 @@
   },
 
   "dependencies": {
+    "busboy": "^1.6.0",
     "astronomy-engine": "^2.1.19",
     "formidable": "^3.5.1",
     "get-stream": "^6.0.1",
