@@ -10,7 +10,7 @@ Write-Host "`n=== Vercel Backup Script ===`n"
 # ----------------------------------------
 
 # GitHub repo to clone
-$repoUrl = "https://github.com/YOUR_USERNAME/answers-premium.git"
+$repoUrl = "https://github.com/webapps-repository/answers-premium.git"
 
 # Local backup workspace
 $backupRoot = "$env:USERPROFILE\vercel-backups"
