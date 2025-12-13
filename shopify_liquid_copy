@@ -1,3 +1,15 @@
+{% comment %}
+
+Shopify answers-premium liquid
+
+Test mode via URL
+https://zzezjx-u8.myshopify.com/pages/answers-premium?debug=1
+
+inside webpage test mode for tokens, set to zero to turn OFF
+const debugMode = new URLSearchParams(window.location.search).get("debug") === "1";
+
+{% endcomment %}
+
 {% layout none %}
 
 <!DOCTYPE html>
