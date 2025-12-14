@@ -6,10 +6,14 @@ Test mode via URL
 https://zzezjx-u8.myshopify.com/pages/answers-premium?debug=1
 
 inside webpage test mode for tokens, set to zero to turn OFF
-const debugMode = new URLSearchParams(window.location.search).get("debug") === "1";
+const debugMode = new URLSearchParams(window.location.search).get("debug") === "1"; 
+
+inside webpage test mode for live checkout set to false
+const TEST_MODE = true;
 
 test script via API
 https://answers-premium.vercel.app/api/system-test
+https://zzqejx-u8.myshopify.com/pages/answers-premium?debug=1
 
 {% endcomment %}
 
