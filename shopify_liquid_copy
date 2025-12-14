@@ -9,7 +9,7 @@ inside webpage test mode for tokens, set to zero to turn OFF
 const debugMode = new URLSearchParams(window.location.search).get("debug") === "1"; 
 
 inside webpage test mode for live checkout set to false
-const TEST_MODE = true;
+const TEST_MODE = false;   // set false for live Shopify checkout
 
 test script via API
 https://answers-premium.vercel.app/api/system-test
