@@ -195,7 +195,7 @@ const API_BASE = "https://answers-premium.vercel.app";
 const API_SPIRITUAL = `${API_BASE}/api/spiritual-report`;
 const API_PREMIUM   = `${API_BASE}/api/detailed-report`;
 
-const TEST_MODE = true;   // set false for live Shopify checkout
+const TEST_MODE = false;   // set false for live Shopify checkout
 const SHOPIFY_STORE = "{{ shop.permanent_domain }}";
 const VARIANT_ID = "47550793875608";
 
@@ -226,6 +226,9 @@ const summaryText = document.getElementById("summary-text");
 const spinner     = document.getElementById("spinner");
 const statusText  = document.getElementById("status-text");
 const premiumBtn  = document.getElementById("premium-btn");
+
+const existingDebug = document.getElementById("premium-debug-box");
+if (existingDebug) existingDebug.remove();
 
 /* ============================
    COMPATIBILITY TOGGLE
@@ -403,7 +406,7 @@ premiumBtn.addEventListener("click", async () => {
 
 (function() {
   const url = new URL(window.location.href);
-  const DEBUG = url.searchParams.get("debug") === "1";
+  const DEBUG = false; // PRODUCTION LOCK
   if (!DEBUG) return;
 
   console.log("🟢 PREMIUM DEBUG MODE ENABLED");
@@ -546,6 +549,10 @@ premiumBtn.addEventListener("click", async () => {
   };
 })();
 </script>
+
+</body>
+</html>
+
 
 </body>
 </html>
